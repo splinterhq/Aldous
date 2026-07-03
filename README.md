@@ -43,7 +43,7 @@ Safety model that we know of (July 2026).
 | SENSOR phrases          | 688                |
 | INTRINSIC_SHUNT calls   | 2                  |
 | INTRINSIC_SHUNT phrases | 26                 |
-| MONOLITHIC_SHUNT calls  | 18 (1 phrase each) |
+| MONOLITHIC_SHUNT calls  | 18 (1 highly-condensed phrase each) |
 | Embedding passes        | 732                |
 | Compiler passes         | 168                |
 

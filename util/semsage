@@ -1,0 +1,606 @@
+#!/bin/sh
+# License: Apache-2.0
+# Copyright 2026 Tim Post 
+# semsage -- manage and explore DECE models using local or remote inference.
+#
+# One tool for the whole lifecycle of a semantic classifier (a DECE model):
+# starting/stopping its systemd services, wiring the install into systemd,
+# provisioning the shared-memory bus the embedder and scorer talk over, and
+# tuning individual centroid keys without a full re-train.
+#
+# Models are named with an explicit type suffix -- Aldous_1-2.dece today, and
+# Aldous-narrator.gguf once the instruct narrator ships. The suffix is never
+# inferred: you pass it, semsage trusts it. A .dece model 'Aldous_1-2' lives at
+# dece/Aldous_1-2/Aldous_1-2.dece.
+#
+# semsage discovers its own install root by resolving its real path (symlinks
+# and all), so a symlink in /usr/local/bin behaves exactly as if you invoked it
+# from the root of the install.
+
+VERSION=0.5.0
+PROG=semsage
+
+# ---------------------------------------------------------------------------
+# Install-root discovery
+# ---------------------------------------------------------------------------
+
+# Resolve $0 through any chain of symlinks and take the grandparent of the
+# resulting util/ directory as the install root.
+resolve_root() {
+    self=$1
+    while [ -L "$self" ]; do
+        link=$(readlink "$self")
+        case $link in
+            /*) self=$link ;;
+            *)  self=$(dirname "$self")/$link ;;
+        esac
+    done
+    util_dir=$(cd "$(dirname "$self")" 2>/dev/null && pwd -P) || return 1
+    dirname "$util_dir"
+}
+
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/semsage"
+CONFIG="$DATA_DIR/config"
+
+ROOT=$(resolve_root "$0")
+
+# If the resolved location doesn't look like an install (e.g. semsage was
+# copied rather than symlinked out), fall back to the path recorded at install
+# time. Missing or stale config is never fatal -- we just skip it.
+if [ -z "$ROOT" ] || [ ! -d "$ROOT/util" ] || [ ! -d "$ROOT/dece" ]; then
+    if [ -f "$CONFIG" ]; then
+        saved=$(sed -n 's/^install_path=//p' "$CONFIG" 2>/dev/null | head -n1)
+        [ -n "$saved" ] && [ -d "$saved/util" ] && ROOT=$saved
+    fi
+fi
+[ -n "$ROOT" ] || ROOT=$(pwd)
+
+# Canonical locations, all derived from ROOT.
+DECE_DIR="$ROOT/dece"
+TRAIN_DIR="$ROOT/train"
+IPC_DIR="$ROOT/app/ipc"
+INF_DIR="$ROOT/app/inf"
+EXP_DIR="$ROOT/app/exp"
+GGUF_DIR="$ROOT/gguf"
+EMBED_MODEL="$GGUF_DIR/nomic.gguf"
+SVCS_CONFIGURED="$ROOT/app/svcs/configured"
+SVCS_ENABLED="$ROOT/app/svcs/enabled"
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+# ---------------------------------------------------------------------------
+# Small helpers
+# ---------------------------------------------------------------------------
+
+die() {
+    echo "$PROG: $*" >&2
+    exit 1
+}
+
+usage_error() {
+    echo "$PROG: $*" >&2
+    echo "Try '$PROG --help' for more information." >&2
+    exit 2
+}
+
+version() {
+    echo "$PROG $VERSION"
+}
+
+usage() {
+    cat <<EOF
+Usage: $PROG <verb> <model> [<options>]
+Manage and explore DECE models using local or remote inference for embeddings.
+
+Models are named with an explicit suffix, e.g. Aldous_1-2.dece. The suffix is
+never inferred (.gguf will be equally valid once the narrator ships).
+
+Valid verbs and their required options (if any) are:
+
+    status    <model>   Query systemctl about <model>'s services.
+    start     <model>   Start <model> via systemctl.
+    stop      <model>   Stop <model> via systemctl.
+    restart   <model>   Restart <model> via systemctl.
+    enable    <model>   Ensure <model>'s services start on login.
+    disable   <model>   Prevent <model> from starting on login.
+    retrain   <model> <keyname>
+                        Extract the whole <keyname> sensor for editing and
+                        re-compiling back into <model>. A fine-tune.
+    uplink    <model>   Set up an IPC shared-memory bus for inference over
+                        Splinference.
+    downlink  <model>   Take down a previously-established Splinter bus.
+    install             Create systemd user directories if missing and (re)run
+                        auto path config. Everything is left off by default.
+    visualize           Launch the Foreshock dashboard (the Deno app under
+                        app/exp) via 'deno task serve'.
+
+Options:
+    -h, -?, --help      Show this help and exit.
+    -V, --version       Show version ($VERSION) and exit.
+
+For uplink/downlink, --memory uses a pure in-memory bus instead of a persistent
+one under app/ipc/.
+
+start / stop / restart report each unit's outcome, verify that a started unit
+actually came up, and on any failure print the unit's status and recent journal
+to stderr. Exit status is the worst result across both units.
+EOF
+}
+
+# Validate a model argument and set NAME (bare name) and MODEL_FILE.
+# Accepts a bare 'Name.dece' or any path ending in it; the .dece is required.
+require_model() {
+    [ -n "$1" ] || usage_error "'$VERB' requires a <model> argument (e.g. Aldous_1-2.dece)"
+    raw=$(basename -- "$1")
+    case $raw in
+        *.dece) NAME=${raw%.dece} ;;
+        *.gguf) die "gguf models are not supported yet (arriving with the instruct narrator): $raw" ;;
+        *.*)    die "unknown model type '$raw' (expected a .dece model)" ;;
+        *)      die "model must carry its suffix, e.g. '${raw}.dece' (the suffix is never inferred)" ;;
+    esac
+    [ -n "$NAME" ] || die "empty model name"
+    MODEL_FILE="$DECE_DIR/$NAME/$NAME.dece"
+}
+
+# Assert the compiled model actually exists on disk.
+require_model_file() {
+    [ -f "$MODEL_FILE" ] || die "model not found: $MODEL_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# systemd wiring (shared by install and enable)
+# ---------------------------------------------------------------------------
+
+# Render app/svcs/configured/<unit>.in -> <unit>, substituting the install root.
+# Returns 0 if the rendered file changed (or is new), 1 if it was already
+# up to date.
+render_unit() {
+    tmpl=$1
+    out=${tmpl%.in}
+    tmp=$(mktemp "${TMPDIR:-/tmp}/semsage-unit.XXXXXX") || die "mktemp failed"
+    # ROOT is a filesystem path; '|' as the sed delimiter keeps '/' literal.
+    sed "s|@SEMSAGE_ROOT@|$ROOT|g" "$tmpl" > "$tmp"
+    if [ ! -f "$out" ] || ! cmp -s "$tmp" "$out"; then
+        mv "$tmp" "$out"
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# Idempotently wire the install into systemd --user:
+#   * create the systemd user unit directory,
+#   * point app/svcs/enabled at it,
+#   * render each unit template and symlink it in,
+#   * daemon-reload if anything changed.
+# Nothing is enabled or started here -- everything stays off by default.
+wire_systemd() {
+    mkdir -p "$SYSTEMD_USER_DIR"
+
+    if [ ! -L "$SVCS_ENABLED" ] || [ "$(readlink "$SVCS_ENABLED")" != "$SYSTEMD_USER_DIR" ]; then
+        rm -rf "$SVCS_ENABLED"
+        ln -s "$SYSTEMD_USER_DIR" "$SVCS_ENABLED"
+    fi
+
+    changed=0
+    for tmpl in "$SVCS_CONFIGURED"/*.service.in; do
+        [ -e "$tmpl" ] || continue
+        render_unit "$tmpl" && changed=1
+        out=${tmpl%.in}
+        link="$SVCS_ENABLED/$(basename "$out")"
+        if [ ! -L "$link" ] || [ "$(readlink "$link")" != "$out" ]; then
+            ln -sf "$out" "$link"
+            changed=1
+        fi
+    done
+
+    [ "$changed" -eq 1 ] && systemctl --user daemon-reload
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Verbs
+# ---------------------------------------------------------------------------
+
+verb_status() {
+    require_model "$1"
+    require_model_file
+    export SYSTEMD_PAGER=""
+    printf 'embedder |  '
+    systemctl --user status "embedder@${NAME}.service" 2>/dev/null | grep "Active:" | sed 's/.*Active: *//'
+    printf 'scorer   |  '
+    systemctl --user status "scorer@${NAME}.service" 2>/dev/null | grep "Active:" | sed 's/.*Active: *//'
+}
+
+# Dump everything you'd normally have to go hunting for after a failed job:
+# the unit's status line and the tail of its journal. All to stderr so it never
+# pollutes parseable stdout.
+svc_diagnose() {
+    unit=$1
+    {
+        echo "--- systemctl --user status $unit ---"
+        SYSTEMD_PAGER="" SYSTEMD_COLORS=0 \
+            systemctl --user status "$unit" --no-pager -l 2>&1
+        echo "--- journalctl --user -u $unit (last 20 lines) ---"
+        journalctl --user -u "$unit" -n 20 --no-pager 2>&1
+    } >&2
+}
+
+# Run one systemctl action against one unit and report the *real* outcome.
+# systemctl's own exit code is not enough: for a Type=simple service, 'start'
+# returns 0 as soon as the process is exec'd, so a binary that dies immediately
+# still looks successful. We therefore confirm the resulting state and, on any
+# failure, dump status + journal so the caller doesn't have to. Returns 0 on
+# success, non-zero otherwise.
+svc_one() {
+    action=$1
+    unit=$2
+
+    if ! systemctl --user "$action" "$unit"; then
+        rc=$?
+        echo "$PROG: $unit: $action FAILED (systemctl exit $rc)" >&2
+        svc_diagnose "$unit"
+        return "$rc"
+    fi
+
+    # 'stop' is conclusive once systemctl returns 0. 'start'/'restart' only
+    # accepted the job -- verify the unit actually came up.
+    if [ "$action" = stop ]; then
+        echo "$PROG: $unit: stopped"
+        return 0
+    fi
+
+    state=$(systemctl --user is-active "$unit" 2>/dev/null)
+    case $state in
+        active)
+            echo "$PROG: $unit: $action OK (active)"
+            return 0 ;;
+        activating)
+            # Model load can take a while; the job was accepted and is coming up.
+            echo "$PROG: $unit: $action accepted (still activating)"
+            return 0 ;;
+        *)
+            echo "$PROG: $unit: $action reported success but unit is '$state'" >&2
+            svc_diagnose "$unit"
+            return 1 ;;
+    esac
+}
+
+# start/stop/restart both units. Every unit is always attempted (so 'stop'
+# takes down the scorer even if the embedder errors); rc is the worst result.
+svc_action() {
+    action=$1
+    rc=0
+    svc_one "$action" "embedder@${NAME}.service" || rc=$?
+    svc_one "$action" "scorer@${NAME}.service"   || rc=$?
+    return "$rc"
+}
+
+verb_start() {
+    require_model "$1"; require_model_file
+    svc_action start
+}
+
+verb_stop() {
+    require_model "$1"; require_model_file
+    svc_action stop
+}
+
+verb_restart() {
+    require_model "$1"; require_model_file
+    svc_action restart
+}
+
+# enable/disable one unit and report the outcome. Unlike start, enable has no
+# runtime to fail into -- success just means the WantedBy symlink now exists (or
+# is gone) -- so we report the resulting is-enabled state and only fall back to
+# a full status+journal dump on an outright systemctl error. Returns 0 on
+# success, non-zero otherwise.
+enable_one() {
+    action=$1        # enable | disable
+    unit=$2
+
+    if ! systemctl --user "$action" "$unit"; then
+        rc=$?
+        echo "$PROG: $unit: $action FAILED (systemctl exit $rc)" >&2
+        svc_diagnose "$unit"
+        return "$rc"
+    fi
+
+    state=$(systemctl --user is-enabled "$unit" 2>/dev/null)
+    echo "$PROG: $unit: $action OK (is-enabled: $state)"
+    return 0
+}
+
+verb_enable() {
+    require_model "$1"; require_model_file
+    wire_systemd
+    rc=0
+    enable_one enable "embedder@${NAME}.service" || rc=$?
+    enable_one enable "scorer@${NAME}.service"   || rc=$?
+    return "$rc"
+}
+
+verb_disable() {
+    require_model "$1"; require_model_file
+    rc=0
+    svc_action stop || rc=$?
+    enable_one disable "embedder@${NAME}.service" || rc=$?
+    enable_one disable "scorer@${NAME}.service"   || rc=$?
+    return "$rc"
+}
+
+assert_model_exists() {
+    # If the user has no directories in dece/, alert them that they need to train a model first.
+    # They also have the option to download a pre-trained model from the internet.
+    if [ -z "$(find "$DECE_DIR" -mindepth 1 -maxdepth 1 -type d)" ]; then
+        echo "$PROG: note: no models found in $DECE_DIR." >&2
+        echo "           run 'train/Aldous_1-2' to train Aldous from scratch. This takes 15-45 minutes depending on your machine." >&2
+        echo "           Alternatively, you can download a pre-trained model from the internet and place it in $DECE_DIR." >&2
+        echo "           See the README for more information." >&2
+        exit 1
+    fi
+}
+
+verb_install() {
+    wire_systemd
+    mkdir -p "$DATA_DIR"
+    printf 'install_path=%s\n' "$ROOT" > "$CONFIG" 2>/dev/null \
+        || echo "$PROG: warning: could not record install path in $CONFIG" >&2
+    mkdir -p "$IPC_DIR"
+    mkdir -p "$GGUF_DIR"
+
+    # Nothing happens without  this
+    assert_model_exists
+
+    # The embedder can't run without the nomic GGUF; flag it now rather than
+    # letting the service fail later.
+    if [ ! -f "$EMBED_MODEL" ]; then
+        echo "$PROG: note: embedding model $EMBED_MODEL is missing." >&2
+        echo "           run 'util/install_nomic' to download it before training or serving." >&2
+        echo "           To use a remote embedder, see app/inf/dece-semsaged.cpp for the env variables to set." >&2
+    fi
+
+    # The dashboard app is a Deno app; warn if Deno isn't on PATH.
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "$PROG: note: Deno is not installed or not on PATH." >&2
+        echo "           install Deno via curl -fsSL https://deno.land/install.sh | sh" >&2
+    fi
+
+    # If this was an install, tell the user it worked.
+    if [ "$VERB" = "install" ]; then
+        echo "Semsage configuration installed to $CONFIG | Root: $ROOT"
+        echo "           Run 'semsage enable <model>' to enable a model's services on login."
+        echo "           Run 'semsage start <model>' to start a model's services now."
+   fi
+
+}
+
+# visualize
+# Launch the Foreshock dashboard (the Deno app under app/exp) via its serve
+# task. Not tied to a specific model -- it talks to whatever scorer gateway
+# SCORER_URL points at. Replaces this process so Ctrl-C stops the server.
+verb_visualize() {
+    verb_install  # ensure Deno is installed and the app exists
+    [ -d "$EXP_DIR" ] || die "dashboard app not found: $EXP_DIR"
+    command -v deno >/dev/null 2>&1 || die "deno is not installed or not on PATH"
+    cd "$EXP_DIR" || die "could not enter $EXP_DIR"
+    exec deno task serve
+}
+
+# uplink [<model>] [--memory]
+# Provision the shared-memory bus the embedder and scorer talk over. The bus
+# name mirrors the systemd instance (the bare model name), so it lands at
+# app/ipc/<name> unless --memory is given.
+verb_uplink() {
+    memory=0
+    name=""
+    for a in "$@"; do
+        case $a in
+            --memory) memory=1 ;;
+            -*)       usage_error "uplink: unknown option '$a'" ;;
+            *)        name=$a ;;
+        esac
+    done
+    require_model "$name"
+
+    RC="$TRAIN_DIR/ipc.rc"
+    if [ "$memory" -eq 1 ]; then
+        BUS="$NAME"
+        INIT_BIN=splinterctl
+        SP="splinterctl --use $NAME --rc-file $RC"
+    else
+        mkdir -p "$IPC_DIR"
+        BUS="$IPC_DIR/$NAME"
+        INIT_BIN=splinterpctl
+        SP="splinterpctl --use $BUS --rc-file $RC"
+    fi
+
+    # 36 slots supports plenty of simultaneous writers plus the lanes.
+    # 128000 bytes per slot is ample for what we need.
+    if [ "$memory" -eq 1 ] || [ ! -f "$BUS" ]; then
+        $INIT_BIN init "$BUS" --slots 36 --length 128000 || die "failed to init bus $BUS"
+    fi
+
+    # data ready
+    $SP set   "__lane_dr_1" "0"
+    $SP label "__lane_dr_1" "signal-data-ready"
+    $SP bind  "signal-data-ready" 1
+    # data waiting
+    $SP set   "__lane_dw_2" "0"
+    $SP label "__lane_dw_2" "signal-data-waiting"
+    $SP bind  "signal-data-waiting" 2
+    # multicast that subscribers should read
+    $SP set   "__lane_mc_1" "0"
+    $SP label "__lane_mc_1" "signal-data-multicast"
+    $SP bind  "signal-data-multicast" 3
+    # multicast that subscribers can ignore if not using
+    $SP set   "__lane_mc_debug" "Debug channel initialized."
+    $SP label "__lane_mc_debug" "signal-data-anycast"
+    $SP bind  "signal-data-anycast" 4
+
+    echo "uplink ready: bus '$BUS'"
+}
+
+# downlink [<model>] [--memory]
+# Tear down a bus previously raised by uplink.
+verb_downlink() {
+    memory=0
+    name=""
+    for a in "$@"; do
+        case $a in
+            --memory) memory=1 ;;
+            -*)       usage_error "downlink: unknown option '$a'" ;;
+            *)        name=$a ;;
+        esac
+    done
+    require_model "$name"
+
+    if [ "$memory" -eq 1 ]; then
+        # In-memory buses have no backing file; they vanish with their owner.
+        echo "downlink: in-memory bus '$NAME' is ephemeral; nothing to remove."
+        return 0
+    fi
+
+    BUS="$IPC_DIR/$NAME"
+    if [ -f "$BUS" ]; then
+        rm -f "$BUS" || die "could not remove bus $BUS"
+        echo "downlink: removed bus '$BUS'"
+    else
+        echo "downlink: no bus at '$BUS'"
+    fi
+}
+
+# retrain <model> <keyname> [-f]
+# Generate dece/<name>/retrain-<key>.sh: a self-contained script that re-trains
+# a single in-place centroid key (a SENSOR or INTRINSIC_SHUNT) without re-running
+# the whole training pass. You then edit its phrases and run it.
+verb_retrain() {
+    force=0
+    model=""
+    key=""
+    for a in "$@"; do
+        case $a in
+            -f) force=1 ;;
+            -*) usage_error "retrain: unknown option '$a'" ;;
+            *)  if [ -z "$model" ]; then model=$a
+                elif [ -z "$key" ]; then key=$a
+                else usage_error "retrain: too many arguments"; fi ;;
+        esac
+    done
+    require_model "$model"
+    [ -n "$key" ] || usage_error "retrain requires a <keyname> (e.g. '+fear', '|--outlook')"
+    require_model_file
+
+    CLASSIFIER="$TRAIN_DIR/$NAME"
+    OUT="$DECE_DIR/$NAME/retrain-${key}.sh"
+    [ -f "$CLASSIFIER" ] || die "training script not found: $CLASSIFIER"
+
+    # Extract the full SENSOR/INTRINSIC_SHUNT block for KEY. Key names hold regex
+    # metacharacters (| ~ + -) so we compare them literally, never as a pattern.
+    # A block starts at a line beginning with SENSOR " or INTRINSIC_SHUNT " whose
+    # first quoted argument equals KEY, and continues across line continuations
+    # until the first line that does not end in a backslash.
+    BLOCK=$(awk -v key="$key" '
+        function rtrim(s) { sub(/[ \t]+$/, "", s); return s }
+        function ends_bslash(s) { return substr(s, length(s), 1) == "\\" }
+        {
+            if (!cap) {
+                if ($0 ~ /^(SENSOR|INTRINSIC_SHUNT)[ \t]+"/) {
+                    q1 = index($0, "\"")
+                    rest = substr($0, q1 + 1)
+                    q2 = index(rest, "\"")
+                    k = substr(rest, 1, q2 - 1)
+                    if (k == key) {
+                        cap = 1; found = 1
+                        print
+                        if (!ends_bslash(rtrim($0))) exit
+                    }
+                }
+                next
+            }
+            print
+            if (!ends_bslash(rtrim($0))) exit
+        }
+        END { if (!found) exit 3 }
+    ' "$CLASSIFIER") || die "no SENSOR or INTRINSIC_SHUNT key named '$key' found in $CLASSIFIER."
+
+    if [ -f "$OUT" ] && [ "$force" -ne 1 ]; then
+        die "'$OUT' already exists. Re-run with -f to overwrite (this discards any edits)."
+    fi
+
+    KIND=$(printf '%s\n' "$BLOCK" | head -n1 | cut -d' ' -f1)
+
+    {
+        echo "#!/bin/sh"
+        echo "#"
+        echo "# Auto-generated by 'semsage retrain' on $(date '+%Y-%m-%d %H:%M:%S')."
+        echo "# Re-trains the single key '${key}' (${KIND}) in model '${NAME}.dece'."
+        echo "#"
+        echo "# Edit the phrase strings in the ${KIND} call below, then run:"
+        echo "#     sh ${OUT}"
+        echo "#"
+        echo "# Make sure no inference embedder/scorer is bound to this store while you"
+        echo "# retrain (e.g. 'semsage stop ${NAME}.dece'); this script runs its own"
+        echo "# vector-training embedder against the live model file."
+        echo
+        echo "set -e"
+        echo
+        echo "# Run from the install root so the relative paths below resolve."
+        echo "cd \"${ROOT}\""
+        echo
+        echo "MODEL=\"${NAME}\""
+        echo
+        echo "# model_funcs.sh bakes the model name into the splinterpctl alias from \$1,"
+        echo "# so set the positional parameter before sourcing it."
+        echo "set -- \"\$MODEL\""
+        echo ". util/lib/model_funcs.sh"
+        echo
+        echo "# Zero this key's vectors and reset its epoch to 2 so splinference will"
+        echo "# write it again while in training mode."
+        echo "splinterpctl retrain \"${key}\""
+        echo
+        echo "# Bring the embedding butler up against the live model."
+        echo "START_EMBEDDER \"dece/\${MODEL}/\${MODEL}.dece\""
+        echo
+        echo "# ---- EDITABLE KEY DEFINITION (edit the phrases, keep the structure) ----"
+        printf '%s\n' "$BLOCK"
+        echo "# ---- END EDITABLE KEY DEFINITION ----"
+        echo
+        echo "STOP_EMBEDDER"
+        echo
+        echo "echo \"Retrained '${key}' in '\${MODEL}.dece'.\""
+    } > "$OUT"
+
+    chmod +x "$OUT"
+    echo "Wrote $OUT"
+    echo "Edit the phrases in the ${KIND} block, then run: sh $OUT"
+}
+
+# ---------------------------------------------------------------------------
+# Argument dispatch
+# ---------------------------------------------------------------------------
+
+# Global help/version can appear before the verb.
+case $1 in
+    -h|--help|-\?|help|"") usage; exit 0 ;;
+    -V|--version|version)  version; exit 0 ;;
+    -*)                    usage_error "unknown option '$1'" ;;
+esac
+
+VERB=$1
+shift
+
+case $VERB in
+    status)   verb_status   "$@" ;;
+    start)    verb_start    "$@" ;;
+    stop)     verb_stop     "$@" ;;
+    restart)  verb_restart  "$@" ;;
+    enable)   verb_enable   "$@" ;;
+    disable)  verb_disable  "$@" ;;
+    retrain)  verb_retrain  "$@" ;;
+    uplink)    verb_uplink    "$@" ;;
+    downlink)  verb_downlink  "$@" ;;
+    install)   verb_install   "$@" ;;
+    visualize) verb_visualize "$@" ;;
+    *)        usage_error "unknown verb '$VERB'" ;;
+esac

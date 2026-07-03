@@ -1,0 +1,21 @@
+# Template unit for the DECE scorer (dece-semsaged).
+#
+# This is a *.in template. `semsage install` expands @SEMSAGE_ROOT@ to the real
+# install root and writes scorer@.service in this directory, then symlinks that
+# rendered unit into the systemd user directory via ../enabled.
+# Edit the .in file, not the generated .service.
+#
+# %i is the model name with no suffix (e.g. Aldous_1-2). The compiled model
+# lives at dece/%i/%i.dece. The .dece suffix is hard-wired here because this is
+# the DECE pipeline; a future .gguf instruct narrator ships as its own unit.
+[Unit]
+Description=DECE scorer (dece-semsaged) for %i
+After=embedder@%i.service
+
+[Service]
+ExecStart=@SEMSAGE_ROOT@/app/inf/dece-semsaged --model @SEMSAGE_ROOT@/dece/%i/%i.dece --bus @SEMSAGE_ROOT@/app/ipc/%i --journal @SEMSAGE_ROOT@/dece/%i/journal.jsonl
+Environment="DECE_MODEL=%i"
+WorkingDirectory=@SEMSAGE_ROOT@
+
+[Install]
+WantedBy=default.target

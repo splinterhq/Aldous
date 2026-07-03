@@ -1,0 +1,12 @@
+ev-attractor         0x1
+outlook-attractor   0x2
+partisan-attractor   0x4
+epistemic-attractor  0x8
+structural-attractor 0x10
+signal-data-ready    0x20
+signal-data-waiting  0x40
+bloom-debug          0x80
+reference-only       0x100
+shunt-attractor      0x200
+intrinsic-shunt      0x400
+ 

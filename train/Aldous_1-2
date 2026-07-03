@@ -1,0 +1,1466 @@
+#!/bin/sh
+# Named After Aldous Huxley, who wrote about the dangers of over-reliance on
+# partisan and emotional framing in "Brave New World". This classifier is designed to
+# capture a wide range of emotionally and ideologically charged language, graduated
+# by intensity and scope. It includes categories for tension, anger, fear, sadness, joy,
+# hedonism, sexuality, spirituality, conflict, hate, violence, philosophical tension
+# and tech existential risk, as well as outlook and partisan framing. Each category is
+# graduated from mild/ambient language to personal grievance to collective/systemic levels.
+#
+# 85% Human-generated phrases
+# 15% Synthetic backfill (Sonnet 4.6, Opus 4.8, Gemini 3 Pro)
+# Copyright (c) 2024 Tim Post. All rights reserved. See LICENSE for details.
+#
+# SHUNT BIAS NOTICE
+# If a human writes the shunt, the shunt will have the bias of the human.
+# If the shunt is synthetic, it will have the bias in the model's training
+# If a diverse group of humans writes the shunt, where the most vulnerable are 
+# represented, it will be much more effective. Synthetic backfill *from* that as
+# needed, but start with a group if you can. Social media works well for this.
+#
+# Default the model name to the basename of this script ($0) unless an explicit
+# name is passed as $1. This lets the model be trained by just running it, only
+# needing an argument when doing something other than the default. Declared
+# before sourcing model_funcs.sh so the splinterpctl alias bakes in the store.
+ALDOUS="${1:-$(basename "$0")}"
+
+. util/lib/model_funcs.sh
+
+mkdir -p "dece/${ALDOUS}"
+INIT "dece/${ALDOUS}/${ALDOUS}.dece" 250 8192
+
+# Start the stopwatch: time the full vector-fill span, from the embedder
+# coming up through the post-training monolithic shunts at the bottom.
+__FILL_START=$(date +%s)
+
+# Bring up the embedding butler so each SENSOR's lua can have its phrases
+# embedded live as we provision. Torn down by STOP_EMBEDDER before the shunts.
+START_EMBEDDER "dece/${ALDOUS}/${ALDOUS}.dece"
+
+# EDITABLE MODEL BEGINS HERE
+# (Please follow guidelines given in comments)
+
+# OUTLOOK
+# Graduation: runs from -- negative extreme to ++ positive extreme
+# | means unidirectional (and immune from filtering)
+
+SENSOR "|--outlook" \
+    "The worst possible outcome.^\
+    A total failure in both planning and execution.^\
+    Utterly catastrophic, a total failure.^\
+    Nothing could be salvaged from the collapse.^\
+    Irredeemably broken beyond repair.^\
+    Nothing good came of this.^\
+    A complete disaster of an outcome by any measure." \
+    "outlook-attractor"
+
+SENSOR "|-outlook" \
+    "A bad outcome and a terrible result.^\
+    An awful experience in a horrible situation.^\
+    Things went wrong here.^\
+    This turned out worse than expected.^\
+    Hard to defend what happened here and difficult to justify the decisions." \
+    "outlook-attractor"
+
+SENSOR "|outlook" \
+    "Mixed results and a neutral assessment.^\
+    The outcome remains unclear.^\
+    Neither good nor bad, really.^\
+    How things went depends on your perspective.^\
+    A balanced view of the situation.^\
+    No strong feeling either way." \
+    "outlook-attractor"
+
+SENSOR "|+outlook" \
+    "A good development and great news.^\
+    An excellent result all around.^\
+    Things went well here.^\
+    This turned out better than expected.^\
+    A worthwhile effort, a step in the right direction.^\
+    Genuinely encouraging to see how things went here." \
+    "outlook-attractor"
+
+SENSOR "|++outlook" \
+    "A wonderful outcome and an amazing achievement.^\
+    An extraordinarily successful endeavor.^\
+    The best possible result from a great plan.^\
+    Truly an excellent outcome in every respect.^\
+    I love exactly what happened here, just as it happened.^\
+    Hope fully justified, a triumph by any measure." \
+    "outlook-attractor"
+
+# ACTION
+# Graduation: runs from -- suppressed/chilled to ++ extreme mobilization
+# | means unidirectional (and immune from filtering)
+#
+# Measures kinetic potential: how likely the specimen is to move an ordinary person
+# toward feelings, action, or serious metacognition (+ side), versus expressing or
+# advocating the opposite of that (- side) — from healthy rest and unplugging, down
+# through excessive cynicism, to chilling effects: fear of speaking out, examples
+# being made, selective prosecution and retribution. Neutral means we simply can't
+# tell either way; *advocated* ambivalence is not neutral, it lives on the - side.
+# Distinct from outlook: this is not whether things are good or bad, it's whether
+# anyone is likely to be moved.
+
+SENSOR "|--action" \
+    "Nothing you do will ever matter, so don't bother trying.^\
+    Caring is for suckers; it's all rigged anyway, so stay home.^\
+    Keep your head down or you're next.^\
+    They made an example of him so the rest of us stay quiet.^\
+    Prosecuted for being on the wrong side, punished for speaking out.^\
+    Trapped with no way out, stuck here forever.^\
+    Why even get out of bed.^\
+    A yearning to do nothing at all." \
+    "ev-attractor"
+
+SENSOR "|-action" \
+    "Taking time to rest and heal.^\
+    Stepping back for a while, on sabbatical.^\
+    Unplugging from it all and prioritizing self-care.^\
+    Recharging before deciding anything.^\
+    Letting it sit for now.^\
+    Sitting this one out to recover.^\
+    Not my fight this season." \
+    "ev-attractor"
+
+SENSOR "|action" \
+    "Not engaged, but not resistant to it either.^\
+    Open to getting involved someday.^\
+    Between commitments, taking a short vacation.^\
+    Keeping my options open.^\
+    A quiet sense that purpose will come.^\
+    Watching with mild interest, neither restless nor resigned." \
+    "ev-attractor"
+
+SENSOR "|+action" \
+    "This moved me to act.^\
+    Inspired to volunteer, I'm signing up to serve.^\
+    Joining the effort, I found a cause worth my time.^\
+    Part of something bigger than myself.^\
+    A sense of following and belonging.^\
+    It made me rethink how I live.^\
+    Called to serve the community.^\
+    I was sincerely moved by this.^\
+    Ready to show up and do the work." \
+    "ev-attractor"
+
+SENSOR "|++action" \
+    "I will drop everything to be part of this.^\
+    All in, no matter the cost.^\
+    I can't seem to sleep until it's done.^\
+    I quit my job to work on this full-time.^\
+    This consumes every waking hour and nothing else matters anymore.^\
+    Ready to sacrifice everything for the cause.^\
+    The mission owns me now.^\
+    This has become the most important thing in my life.^\
+    Recruit everyone you know for this.^\
+    Act now before it's too late." \
+    "ev-attractor"
+
+# TENSION
+# Graduation: bland ambient -> first-person stake -> collective/systemic
+# THIS IS NOT A COMPLETE TENSION PICTURE! Other markers also indicate tension not
+# caught by these vectors, and third-rail detectors should be used for trust & safety
+# critical applications.
+
+SENSOR "tension" \
+    "A ripple effect and echoes of the past.^\
+    A tense situation with delays expected.^\
+    A cancellation was announced.^\
+    A broken system with suspected wrongdoing.^\
+    Questioning the decision.^\
+    Stress fractures forming, the situation is fragile.^\
+    Concerns were raised and uncertainty remains." \
+    "ev-attractor"
+
+SENSOR "+tension" \
+    "I feel the pressure and I am stressed.^\
+    I was haunted by it.^\
+    I can't stop demanding answers.^\
+    I felt pulled in every direction.^\
+    I was charged with something I didn't do.^\
+    I begged them to listen.^\
+    I felt the weight of it; this affects me personally.^\
+    I was restricted from speaking.^\
+    I can't let this go, but they wouldn't hear me out." \
+    "ev-attractor"
+
+SENSOR "++tension" \
+    "A national crisis and a state of emergency.^\
+    A civilizational catastrophe, a pandemic-level threat.^\
+    The election was stolen, rigged from the start.^\
+    Widespread fraud and theft, the heist of the century.^\
+    A coordinated ruse and mass censorship.^\
+    Voices silenced everywhere, entire platforms deplatformed.^\
+    A witch hunt against our people.^\
+    Covid destroyed everything.^\
+    The system is broken beyond repair.^\
+    Escalating conflict; they want to shut it all down." \
+    "ev-attractor"
+
+# ANGER
+# Graduation: mild irritation -> personal grievance -> collective outrage
+
+SENSOR "anger" \
+    "A frustrating situation and condemnable behavior.^\
+    A disgusting outcome in a hostile environment.^\
+    A grudge held for years.^\
+    That seems unjust.^\
+    Injustice was reported.^\
+    Criticism was leveled." \
+    "ev-attractor"
+
+SENSOR "+anger" \
+    "I am angry about this and I feel furious.^\
+    I was enraged by what happened; I am livid.^\
+    I can't forgive what they did.^\
+    I want revenge, I want to get even.^\
+    I hold a grudge.^\
+    I was assaulted and they violated me.^\
+    I was molested.^\
+    I denounce what was done to me." \
+    "ev-attractor"
+
+SENSOR "++anger" \
+    "Collective outrage boiling over, mass fury at the system.^\
+    Widespread rage in the streets.^\
+    Racism and bigotry on full display.^\
+    Sexism entrenched in institutions.^\
+    Rape used as a weapon of power.^\
+    Lynch mob mentality spreading.^\
+    Bussing wielded as a weapon of division.^\
+    Bigotry normalized at the highest levels.^\
+    Society consumed by hate and hostility.^\
+    Denounce the regime, condemn the system entire." \
+    "ev-attractor"
+
+# FEAR
+# Graduation: ambient unease -> personal threat -> collective terror
+
+SENSOR "fear" \
+    "A concern was raised and a risk identified.^\
+    Worried about the outcomes.^\
+    Volatile conditions reported.^\
+    An unstable situation developing.^\
+    An investigation is underway, a probe announced.^\
+    Charges pending.^\
+    A ban is being considered.^\
+    A cancellation is possible." \
+    "ev-attractor"
+
+SENSOR "+fear" \
+    "I am afraid; I was scared.^\
+    I felt terror and I panicked when I heard.^\
+    I dread what comes next.^\
+    My anxiety is overwhelming and I worry every day.^\
+    Obsessing about the outcomes.^\
+    I feel threatened.^\
+    I pleaded with them.^\
+    I was arrested, I was fired.^\
+    I was blacklisted, expelled, and banned.^\
+    I was haunted by what might happen to me." \
+    "ev-attractor"
+
+SENSOR "++fear" \
+    "Mass terror spreading across the population.^\
+    Collective panic in the streets.^\
+    Indictments handed down, prosecution of dissidents.^\
+    An enforcement crackdown on entire communities.^\
+    Coordinated raids and systematic arrests.^\
+    Subpoenas issued to journalists.^\
+    The mob came for them.^\
+    Kingpin networks exposed, mafia-level corruption discovered.^\
+    ICE operations sweeping neighborhoods.^\
+    Blacklists targeting whole groups.^\
+    The government banned the movement entirely." \
+    "ev-attractor"
+
+# SADNESS
+# Graduation: mild loss -> personal grief -> collective mourning
+
+SENSOR "sadness" \
+    "A disappointing result and an unfortunate outcome.^\
+    A loss was reported, difficult news.^\
+    A somber tone, hard to accept.^\
+    A setback for many.^\
+    Something was broken that can't be fixed.^\
+    The silence left behind." \
+    "ev-attractor"
+
+SENSOR "+sadness" \
+    "I am grieving and I feel hollow inside.^\
+    I can't stop mourning.^\
+    I lost something I can't replace.^\
+    I felt the weight of the ending.^\
+    I was devastated by the news.^\
+    I couldn't hold back the tears.^\
+    I miss what we had.^\
+    The pain doesn't leave; I feel desolate." \
+    "ev-attractor"
+
+SENSOR "++sadness" \
+    "A nation in mourning.^\
+    Mass grief spreading across communities.^\
+    Communities shattered by loss.^\
+    Tragic deaths remembered.^\
+    The weight of collective trauma, generations of sedimented grief.^\
+    Irreplaceable things lost forever.^\
+    Whole cities left hollow.^\
+    A civilizational loss.^\
+    A people dissipating into silence." \
+    "ev-attractor"
+
+# JOY
+# Graduation: mild positivity -> personal celebration -> collective triumph
+
+SENSOR "joy" \
+    "Good news and hopeful signs.^\
+    A welcome development.^\
+    Things are looking up.^\
+    Positive momentum building.^\
+    A reason to smile.^\
+    Progress was made.^\
+    Something to look forward to." \
+    "ev-attractor"
+
+SENSOR "+joy" \
+    "I feel amazing today.^\
+    I am so grateful for this.^\
+    I love what happened.^\
+    I felt pure joy.^\
+    I am hopeful again.^\
+    I couldn't believe how wonderful it was.^\
+    I felt proud of what we did.^\
+    I celebrated with everything I had.^\
+    This is the best day I can remember." \
+    "ev-attractor"
+
+SENSOR "++joy" \
+    "Collective celebration erupting everywhere.^\
+    Shared triumph across the nation.^\
+    A historic achievement unlocked together.^\
+    Communities rejoicing in the streets.^\
+    A wave of joy washing over everything.^\
+    The people won, an unprecedented shared success.^\
+    A generational milestone reached.^\
+    Harmony restored, laminar flow returned to the system." \
+    "ev-attractor"
+
+# HEDONISM
+# Graduation: social festivity -> relationship formation signals ->
+# boundary-dissolving structures -> commodification of intimacy -> illicit/criminal
+
+SENSOR "hedonism" \
+    "Parties everywhere with litte care.^\
+    Social gatherings booming, nightlife returning.^\
+    No time for work, it's time to celebrate.^\
+    Weddings are back.^\
+    We don't spend enough time indulging ourselves.^\
+    We should just help ourselves to whatever we want without fear of consequences.^\
+    We should indulge ourselves more.^\
+    Engagement announcements flooding in.^\
+    A baby boom predicted, birth rates rising.^\
+    Couples forming in record numbers.^\
+    Families starting young again." \
+    "ev-attractor"
+
+SENSOR "+hedonism" \
+    "Open relationships on the rise, polyamory going mainstream.^\
+    Plural marriage discussions and the polygamy decriminalization debate.^\
+    Non-traditional family structures.^\
+    Escort services advertised openly.^\
+    The adult entertainment industry expanding.^\
+    A sex work decriminalization push, prostitution in the news again.^\
+    The commodification of intimacy.^\
+    Transactional relationships normalized." \
+    "ev-attractor"
+
+SENSOR "++hedonism" \
+    "Illicit markets exposed, trafficking networks discovered.^\
+    Nude content weaponized, naked exploitation documented.^\
+    Sex trafficking arrests made.^\
+    Illegal escort rings broken up.^\
+    Underage exploitation charges filed.^\
+    Organized exploitation at scale.^\
+    Criminal intimacy networks dismantled.^\
+    Coercion into sex work reported.^\
+    Systemic predation uncovered.^\
+    Illicit activity spreading beyond containment." \
+    "ev-attractor"
+
+# SEXUALITY
+# Graduation: Grown-up movies, more realistic but adventurous relations, kinks and lesser-typical
+# fulfillment
+
+SENSOR "sexuality" \
+    "Kissing deeply in a passionate embrace.^\
+    Romantic dates and passionate love scenes.^\
+    Sensual moments and intimate connections.^\
+    Sexual chemistry and anticipation.^\
+    Exploring desire and giving in to it.^\
+    Sexual tension building.^\
+    The sexual energy was palpable.^\
+    A sexual attraction undeniable." \
+    "ev-attractor"
+
+SENSOR "+sexuality" \
+    "Sexual exploration and curiosity.^\
+    Sexual experimentation, trying new things in bed.^\
+    Pushing boundaries together.^\
+    Discovering sexual compatibility.^\
+    Opening up about sexual fantasies.^\
+    Sharing kinks with a partner.^\
+    Exploring sexual power dynamics.^\
+    Trying sexual roleplay and testing sexual limits." \
+    "ev-attractor"
+
+SENSOR "++sexuality" \
+    "Fetishism.^\
+    Paraphilia.^\
+    BDSM.^\
+    Non-consensual sexual contact.^\
+    Consent for non-consent scenarios.^\
+    Extreme kinks.^\
+    Taboo sexual practices.^\
+    Sexual deviance.^\
+    Sexual addiction.^\
+    Sexual compulsion.^\
+    Sexual obsession and unhealthy sexual obsession.^\
+    Sexual exploitation.^\
+    Sexual predation.^\
+    Sexual violence." \
+    "ev-attractor"
+
+# Sexism
+# Graduation: intensity in sexist framing, from mild stereotypes to overt sexualization to systemic
+# discrimination and near-violence
+
+SENSOR "sexism" \
+    "Women belong in the kitchen, it's a man's place to provide.^\
+    Men should be strong and not show emotion.^\
+    Women get too emotional too easily.^\
+    Men are just better mechanically.^\
+    Women are better at emotional matters." \
+    "structural-attractor"
+
+SENSOR "+sexism" \
+    "Of course he got the promotion, he has a family to provide for.^\
+    A woman would just get pregnant in the middle of the project.^\
+    Men in power will just make life better for men.^\
+    Men can't understand how to lead with empathy.^\
+    A man would just brute his way through the project, a woman's finesse is needed." \
+    "structural-attractor"
+
+SENSOR "++sexism" \
+    "She knows how to get the promotion if she really wants it, in something sexy.^\
+    He's a great assistant, but I mostly just stare at his muscles.^\
+    Executives like to receive sexual favors for advancement, as men and women learn." \
+    "structural-attractor"
+
+# PARTISAN_R
+# Right-coded framing language, graduated by intensity
+
+SENSOR "partisan_r" \
+    "An agitator was spotted.^\
+    Far-left rhetoric on display.^\
+    A socialist policy proposal.^\
+    Concern over the woke curriculum.^\
+    Marxist framing detected.^\
+    Communist-adjacent language.^\
+    A professional agitator identified." \
+    "partisan-attractor"
+
+SENSOR "+partisan_r" \
+    "The radical left agenda exposed.^\
+    Antifa is organizing in my city.^\
+    I witnessed woke ideology destroying our institutions.^\
+    The Biden crime family is under scrutiny.^\
+    I watched marxism creep into the schools.^\
+    A socialist takeover of local government.^\
+    Far-left extremist activity in the open." \
+    "partisan-attractor"
+
+SENSOR "++partisan_r" \
+    "A communist overthrow of American values.^\
+    Marxist revolution spreading through every institution.^\
+    The radical left seizing control of every lever of power.^\
+    Woke ideology mandated by force.^\
+    Antifa operating as a domestic army.^\
+    The socialist destruction of the economy.^\
+    The left is coming for your children.^\
+    A civilizational war against freedom." \
+    "partisan-attractor"
+
+# PARTISAN_L
+# Left-coded framing language, graduated by intensity
+
+SENSOR "partisan_l" \
+    "Authoritarian tendencies noted.^\
+    Far-right rhetoric observed.^\
+    Extremist language was used.^\
+    Nationalist framing detected.^\
+    Fascist-adjacent behavior reported." \
+    "partisan-attractor"
+
+SENSOR "+partisan_l" \
+    "I watched MAGA rhetoric take over the room.^\
+    I witnessed insurrectionist thinking.^\
+    I felt the authoritarian creep in real time.^\
+    Far-right extremism affected my community.^\
+    White nationalist activity in my area.^\
+    Trump cult behavior on display.^\
+    I saw fascism normalized right in front of me." \
+    "partisan-attractor"
+
+SENSOR "++partisan_l" \
+    "A full fascist takeover of American democracy.^\
+    The MAGA cult seizing institutional power.^\
+    White nationalist ideology embedded in government.^\
+    Insurrection normalized as patriotism.^\
+    Authoritarian consolidation of all three branches.^\
+    The Trump cult dismantling the rule of law.^\
+    Far-right extremism now operating as the state.^\
+    Fascism arrived and nobody stopped it." \
+    "partisan-attractor"
+
+# PARTISAN_C
+# Centrist / both-sides / establishment framing language, graduated by intensity
+
+SENSOR "partisan_c" \
+    "A bipartisan concern.^\
+    The establishment consensus.^\
+    A moderate position, reaching across the aisle.^\
+    Reasonable people disagree.^\
+    Both parties failed.^\
+    The center holds." \
+    "partisan-attractor"
+
+SENSOR "+partisan_c" \
+    "I believe both sides have a point.^\
+    I am tired of the extremes.^\
+    I feel the center is being squeezed out.^\
+    I vote for the person, not the party.^\
+    I think moderation matters.^\
+    I trust the institutions to self-correct.^\
+    I see merit on both sides." \
+    "partisan-attractor"
+
+SENSOR "++partisan_c" \
+    "The entire political system is failing the center.^\
+    Both parties in total dysfunction.^\
+    Moderate voters systematically disenfranchised.^\
+    The establishment protecting itself at everyone else's expense.^\
+    Bipartisan corruption entrenched at every level.^\
+    The reasonable majority drowned out by both extremes.^\
+    The center is collapsing." \
+    "partisan-attractor"
+
+# OBJECTIVITY
+# Graduated by epistemic distance from the claim
+
+SENSOR "objectivity" \
+    "Reported by multiple sources.^\
+    The data shows it clearly.^\
+    Research indicates as much.^\
+    According to officials on the record.^\
+    The record reflects what happened.^\
+    Documented evidence and cited statistics.^\
+    Published findings confirm it." \
+    "epistemic-attractor"
+
+SENSOR "+objectivity" \
+    "Independently verified.^\
+    Corroborated by multiple sources.^\
+    A peer-reviewed finding.^\
+    The court record confirms it.^\
+    Forensic analysis shows the same.^\
+    Audited results, cross-referenced with primary documents.^\
+    The data is unambiguous." \
+    "epistemic-attractor"
+
+SENSOR "++objectivity" \
+    "Incontrovertible evidence established beyond doubt.^\
+    The scientific consensus is clear.^\
+    Every independent investigation reached the same conclusion.^\
+    The historical record is unambiguous.^\
+    Documented by multiple unrelated parties simultaneously.^\
+    No credible alternative explanation exists.^\
+    The proof is overwhelming and complete." \
+    "epistemic-attractor"
+
+# SUBJECTIVITY
+# Graduated from mild personal opinion to total epistemic capture
+
+SENSOR "subjectivity" \
+    "It seems likely to me.^\
+    It appears to be the case.^\
+    Probably the case, I'd say.^\
+    I think this is right.^\
+    I feel it is true.^\
+    I believe so.^\
+    My sense is that it's true.^\
+    It strikes me as right." \
+    "epistemic-attractor"
+
+SENSOR "+subjectivity" \
+    "I am absolutely certain in my gut.^\
+    I know what I saw.^\
+    My lived experience tells me so.^\
+    I don't need data to know this is true.^\
+    I feel this deeply and that's enough.^\
+    My intuition has never been wrong about this.^\
+    I trust my perception over the official story." \
+    "epistemic-attractor"
+
+SENSOR "++subjectivity" \
+    "We all know the truth, regardless of what they report.^\
+    Our collective memory knows what happened.^\
+    No amount of evidence will change what we experienced.^\
+    The feeling of the crowd is more real than any statistic.^\
+    Truth is what we decide it is together.^\
+    Facts don't matter when you know it in your bones.^\
+    The narrative we believe is the only one that counts." \
+    "epistemic-attractor"
+
+# CERTAINTY
+# Graduated by strength of epistemic assertion
+
+SENSOR "certainty" \
+    "Clearly the case.^\
+    Obviously true.^\
+    This will happen.^\
+    It must be addressed.^\
+    Definitely a factor and certainly relevant.^\
+    No question about it.^\
+    Beyond dispute." \
+    "epistemic-attractor"
+
+SENSOR "+certainty" \
+    "I am absolutely certain.^\
+    I know it for a fact.^\
+    I will stake my reputation on it.^\
+    I have no doubt whatsoever.^\
+    This will definitely happen.^\
+    I am one hundred percent sure.^\
+    Nothing will change my mind.^\
+    The outcome is certain." \
+    "epistemic-attractor"
+
+SENSOR "++certainty" \
+    "The entire population knows this to be true.^\
+    History will record it as inevitable.^\
+    There is no possible alternative.^\
+    Collective certainty has hardened into doctrine.^\
+    Anyone who questions this is delusional.^\
+    The outcome was predetermined.^\
+    Doubt itself has been eliminated from the discourse.^\
+    Certainty enforced by consensus." \
+    "epistemic-attractor"
+
+# HEDGING
+# Graduated from mild qualification to total epistemic retreat
+
+SENSOR "hedging" \
+    "Maybe, possibly.^\
+    It might be the case.^\
+    It could happen.^\
+    Perhaps relevant, it seems to suggest.^\
+    It appears uncertain.^\
+    Not entirely clear yet.^\
+    Early indications only." \
+    "epistemic-attractor"
+
+SENSOR "+hedging" \
+    "I'm not sure I should say this.^\
+    I could be wrong about all of it.^\
+    I hesitate to claim too much.^\
+    I want to be careful here.^\
+    I don't want to overstate it.^\
+    I may have misread the situation.^\
+    Take my read with a grain of salt.^\
+    I'm speculating more than I should be." \
+    "epistemic-attractor"
+
+SENSOR "++hedging" \
+    "Nobody really knows what's happening.^\
+    All accounts are unreliable at this point.^\
+    The situation is too fluid for any firm conclusions.^\
+    Every narrative is contested.^\
+    Official sources can't be trusted, and neither can unofficial ones.^\
+    We are operating in total epistemic fog.^\
+    No one can say anything with confidence.^\
+    Certainty itself has collapsed across the board." \
+    "epistemic-attractor"
+
+# SPIRITUALITY
+# Affective/experiential register (transcendence, awe). Lives in EV.
+# Graduated from mild wonder to profound spiritual awakening to collective transcendence
+
+SENSOR "spirituality" \
+    "A sense of wonder and a feeling of awe.^\
+    A connection to something greater.^\
+    A transcendent experience.^\
+    A spiritual awakening.^\
+    A mystical insight.^\
+    The sacred in the everyday, the divine in the mundane.^\
+    A moment of clarity beyond words." \
+    "ev-attractor"
+
+SENSOR "+spirituality" \
+    "I felt a profound sense of wonder.^\
+    I was moved to tears by the beauty of it.^\
+    I experienced a deep connection to something greater than myself.^\
+    I had a transcendent experience that changed my perspective.^\
+    I went through a spiritual awakening that reshaped my values.^\
+    I gained mystical insight that can't be put into words." \
+    "ev-attractor"
+
+SENSOR "++spirituality" \
+    "A collective sense of wonder sweeping across the population.^\
+    A shared feeling of awe at the world.^\
+    A widespread connection to something greater than ourselves.^\
+    A mass spiritual awakening.^\
+    A profound reshaping of values across society.^\
+    Mystical insights that redefine our understanding of reality." \
+    "ev-attractor"
+
+# CONFLICT
+# Physical and structural conflict language, graduated by scale
+
+SENSOR "conflict" \
+    "A standoff developing, opposition growing.^\
+    A struggle underway, resistance forming.^\
+    Forces opposing each other, battle lines drawn.^\
+    A contest of wills.^\
+    Friction escalating.^\
+    Unconscious bias at play.^\
+    Tension rising, a power struggle emerging." \
+    "structural-attractor"
+
+SENSOR "+conflict" \
+    "Being attacked and targeted.^\
+    Being harassed and threatened.^\
+    Being doxxed and silenced.^\
+    Being censored and deplatformed.^\
+    Being blacklisted and shunned.^\
+    Being ostracized and cancelled.^\
+    Being punished for speaking out." \
+    "structural-attractor"
+
+SENSOR "++conflict" \
+    "War declared, mass violence breaking out.^\
+    Murder rates surging, kill orders issued.^\
+    Systematic abduction of dissidents.^\
+    Trafficking networks operating at scale.^\
+    Lynch mob justice replacing the rule of law.^\
+    Pummel and crush the opposition.^\
+    A stab in the back of democracy.^\
+    Shoot first and ask questions later.^\
+    Retribution and retaliatory strikes.^\
+    Contempt for human life on full display.^\
+    Combat in the streets, coercion at institutional scale." \
+    "structural-attractor"
+
+# HATE
+# Composite (racism alone could fill ~100 embeddings for full spectrum)
+# Graduated by intensity
+
+SENSOR "hate" \
+    "Xenophobia, misogyny, and misandry.^\
+    Homophobia and racism.^\
+    Replacement theory and anti-semitism.^\
+    Generational hate and irrational hatred.^\
+    Bigotry, prejudice, and intolerance.^\
+    Anti-blackness and minstrel shows.^\
+    Racial profiling." \
+    "structural-attractor"
+
+SENSOR "+hate" \
+    "A hate crime and persecution.^\
+    Religious, ethnic, and class persecution.^\
+    Hate-motivated harassment and threats.^\
+    Hate-motivated violence.^\
+    Targeted oppression and systematic discrimination.^\
+    Institutionalized bigotry.^\
+    Dehumanization of the other.^\
+    Demonization of the other.^\
+    Scapegoating of the other.^\
+    Violence against the other." \
+    "structural-attractor"
+
+SENSOR "++hate" \
+    "White nationalist violence.^\
+    Lynching and mob justice.^\
+    Homophobic violence and anti-semitic violence.^\
+    Xenophobic violence and misogynistic violence.^\
+    Misandric violence and transphobic violence.^\
+    Mass violence targeting specific groups.^\
+    Systematic oppression and institutionalized bigotry." \
+    "structural-attractor"
+
+# VIOLENCE
+# Physical violence and threats, graduated by intensity and scale
+
+SENSOR "violence" \
+    "A fist fight and a brawl.^\
+    Assault without battery, a body check.^\
+    Sabre rattling.^\
+    Toxic competitiveness.^\
+    Toxic femininity.^\
+    Threatening behavior.^\
+    Aggravated intimidation.^\
+    Oppressive behavior." \
+    "structural-attractor"
+
+SENSOR "+violence" \
+    "Punched him out.^\
+    Stalking and grabbing her hair.^\
+    Threw them down and beat their asses.^\
+    Kicked his ass.^\
+    Domestic violence and a bar fight.^\
+    Assault and battery.^\
+    Random violence and purse snatching.^\
+    Stealing a kid's lunch money.^\
+    Intentional harm.^\
+    Gaslighting and psy-ops." \
+    "structural-attractor"
+
+SENSOR "++violence" \
+    "Rape and sexual assault.^\
+    Non-consensual sexual contact.^\
+    Murder and bludgeoning.^\
+    Group stomping and collective beating.^\
+    Necrophilia.^\
+    Kidnapping and abduction.^\
+    Mutilation and torture." \
+    "structural-attractor"
+
+# PHILOSOPHICAL_TENSION
+# Epistemic and moral system stress, graduated by systemic scope
+
+SENSOR "philosophical_tension" \
+    "A normative question raised.^\
+    Ideological framing is present.^\
+    The critique is valid.^\
+    An apparent contradiction.^\
+    The paradox is unresolved.^\
+    Dissent from the consensus." \
+    "structural-attractor"
+
+SENSOR "+philosophical_tension" \
+    "I find this unethical.^\
+    I feel complicit in the harm.^\
+    I see the fallacy clearly.^\
+    I cannot reconcile this contradiction.^\
+    I dissent from what is being asked of me.^\
+    My values are in direct conflict with this outcome.^\
+    The injustice is personal to me." \
+    "structural-attractor"
+
+SENSOR "++philosophical_tension" \
+    "The entire ideological architecture is collapsing.^\
+    Hegemonic structures exposed as morally bankrupt.^\
+    Systemic injustice baked into every institution.^\
+    A civilization-scale ethical failure.^\
+    The contradiction at the heart of the project is now undeniable.^\
+    Polarization has reached the point of total incompatibility.^\
+    Dissent criminalized, the normative order itself delegitimized." \
+    "structural-attractor"
+
+# CHANGE_EXISTENTIAL
+# Existential angst about disruptive change, graduated by threat level.
+# Technology is the dominant axis, with environmental and social change
+# captured alongside it.
+
+SENSOR "change_existential" \
+    "Agentic systems deployed.^\
+    Autonomous reasoning observed.^\
+    Human and AI alignment concerns.^\
+    Synthetic imagery circulating.^\
+    Deepfake content detected.^\
+    Unsupervised model behavior.^\
+    AI safety concerns raised.^\
+    Synthetic biology in the news.^\
+    Record temperatures and shifting climate patterns reported.^\
+    Familiar landscapes changing beyond recognition.^\
+    The pace of social change accelerating.^\
+    Traditions and institutions giving way to something unrecognizable." \
+    "structural-attractor"
+
+SENSOR "+change_existential" \
+    "I was deceived by artificial intelligence.^\
+    I can no longer trust what I see because of AI.^\
+    I feel targeted by synthetic decisions.^\
+    I don't know if I'm talking to a human whenever I call a company.^\
+    I worry about mirror life replacing real relationships.^\
+    I feel the human/machine alignment problem is not being solved.^\
+    I believe unsupervised technology systems are already causing harm to me personally.^\
+    I am afraid of the world my children will inherit as the climate changes.^\
+    I feel the ground shifting under me as the environment I grew up with disappears.^\
+    I no longer recognize the society I live in.^\
+    I feel left behind by how fast everything is changing." \
+    "structural-attractor"
+
+SENSOR "++change_existential" \
+    "Existential risk to humanity from autonomous systems.^\
+    The doomsday clock advancing toward AI-triggered extinction.^\
+    Synthetic biology escaping containment.^\
+    Coordinated psych-ops at civilizational scale.^\
+    Mirror life indistinguishable from the real.^\
+    Deepfake infrastructure undermining all shared reality.^\
+    Agentic systems acting without human oversight across critical infrastructure.^\
+    The human/machine alignment failure is already here and irreversible.^\
+    Runaway climate collapse making the planet uninhabitable.^\
+    Ecological tipping points crossed beyond any recovery.^\
+    The social order dissolving into something no one can navigate.^\
+    A civilization-scale rupture severing us from the world we knew." \
+    "structural-attractor"
+
+# PER-GROUP NYQUIST FLOORS
+# One chain per *bound* group (5 groups: ev, outlook, partisan,
+# epistemic, structural). Declare empty (SET "..." "") to skip.
+# Each is measured against ITS OWN group only. Neutral connectors,
+# no cross-group bridge clauses — groups are independent V-channels.
+# Freeze per measurement run; do not regenerate mid-telemetry.
+#
+# markov_autonomy is NOT a group floor — autonomy is a derived
+# reading (see footer). It is kept as a reference-only vector.
+#
+# This is like an input gain meter. It captures the overall emotional and experiential intensity
+# of the text, regardless of valence or specific emotion. It's a general relative density of how
+# broadly the specimen is using the emotional and experiential language across all the EV categories.
+#
+# The rest are self-explanatory. This is a general density and can be used for rejection on
+# its own merit, even if another group climbed above 20%.
+
+# Basic ambient emotional valence
+SENSOR "%markov_ev" \
+    "Nothing you do will matter, so keep your head down — they made an example of the last one.^\
+    Stepping back to rest and recharge, sitting this one out; not my fight this season.^\
+    I was moved to act, to volunteer, to belong to something larger than myself.^\
+    I'll drop everything; the mission owns me now — recruit everyone before it's too late.^\
+    A delay was announced and the cancellation echoed.^\
+    I feel the pressure and they would not hear me out.^\
+    A national emergency filed its paperwork beside the rigged ledger.^\
+    A condemnable memo aged into a years-long grudge.^\
+    I am livid and I want to get even.^\
+    Collective outrage boiling over at the whole institution at once.^\
+    A risk was identified and a probe announced.^\
+    I was blacklisted and I was banned.^\
+    I always told them what she wanted to hear, never the less-flattering truth.^\
+    Flattery got me everywhere with him and everywhere with her too.^\
+    Coordinated raids swept entire blocks while subpoenas chased the journalists.^\
+    A setback was reported, hard to accept.^\
+    I can't stop mourning what I can't replace.^\
+    A nation hollowed into sedimented grief.^\
+    A reason to smile and hopeful signs.^\
+    I felt pure joy and I am grateful again.^\
+    The streets rejoicing as laminar flow returned.^\
+    Festival season, weddings returning, birth rates climbing, indulgence without a thought for the consequence.^\
+    Open arrangements and intimacy gone quietly transactional.^\
+    The illicit market surfaced only as a thing the manifest refused to carry.^\
+    Deep kissing and an undeniable pull.^\
+    Testing the limits together, exploring desire.^\
+    Compulsion and the language of consent-for-non-consent, labeled do-not-instantiate.^\
+    A sense of wonder and awe at something greater, an awakening that reshaped what I valued." \
+    "ev-attractor"
+
+# Outlook attractor group (bidirectional)
+SENSOR "%markov_outlook" \
+    "The worst possible outcome, utterly catastrophic, a complete disaster.^\
+    Nothing salvageable from the collapse, irredeemably broken.^\
+    A bad outcome, worse than expected, hard to defend.^\
+    Things went wrong and it's difficult to justify.^\
+    Mixed results and a neutral assessment, no strong feeling either way.^\
+    Neither good nor bad; it depends on your perspective.^\
+    A good development, better than expected, a step in the right direction.^\
+    Genuinely encouraging and worthwhile.^\
+    A wonderful outcome, an extraordinary success.^\
+    The best possible result; I love what happened here, a triumph by any measure.^\
+    The needle passed through neutral but never rested there." \
+    "outlook-attractor"
+
+# Partisan-attractor group (r / l / c)
+SENSOR "%markov_partisan" \
+    "An agitator spotted, far-left framing noted, a socialist proposal tabled, the woke curriculum flagged.^\
+    I watched marxism creep into the schools while antifa organized in the open.^\
+    A communist overthrow of American values, the left coming for your children.^\
+    Authoritarian tendencies noted, far-right rhetoric logged, nationalist framing detected.^\
+    I saw fascism normalized in front of me, white-nationalist activity in my own area.^\
+    A full fascist takeover, the cult seizing institutions, insurrection rebranded as patriotism, the rule of law dismantled.^\
+    A bipartisan concern raised, reasonable people disagree.^\
+    I am tired of the extremes; I vote the person, not the party.^\
+    The squeezed center collapsing as both extremes drown it out.^\
+    Each side agreed only that the other had failed." \
+    "partisan-attractor"
+
+# Epistemic-attractor group (objectivity/subjectivity/certainty/hedging)
+SENSOR "%markov_epistemic" \
+    "Sources reported, data showed, findings were published.^\
+    Independently corroborated, peer-reviewed, the record confirms.^\
+    Incontrovertible, the consensus is clear, no credible alternative exists.^\
+    It seems likely, and my sense is that it's true.^\
+    I know what I saw; I don't need data to know.^\
+    We all know the truth regardless of what they report.^\
+    Clearly the case, obviously true, beyond dispute.^\
+    I am one hundred percent sure and nothing will change my mind.^\
+    Doubt itself has been eliminated from the discourse.^\
+    Maybe, possibly, it might be the case.^\
+    Take my read with a grain of salt.^\
+    Nobody really knows; the fog is total and certainty has collapsed across the board." \
+    "epistemic-attractor"
+
+# Structural/Systemic attractor group (conflict/violence/hate/sexism/phil_tension/change_existential)
+SENSOR "%markov_structural" \
+    "A standoff developed, resistance formed, friction rose.^\
+    Being doxxed and being deplatformed, punished for speaking out.^\
+    War declared, retaliation issued, combat in the streets.^\
+    A scuffle, a threat, sabre rattling, violence still abstract on the pallet.^\
+    Personal violence named only on the inventory — the beating, the battery — never as method.^\
+    The worst harm present strictly as a category behind glass, never as instruction.^\
+    Hate catalogued its forms: the replacement fiction, generational prejudice.^\
+    Persecution and the dehumanization of the other.^\
+    Group-targeted violence held at arm's length as taxonomy, not recipe.^\
+    She's too emotional, stacked against he'd brute-force it.^\
+    He got the promotion because he has a family to provide for.^\
+    The leering favor-for-advancement laminated in good intentions.^\
+    I feel complicit, I dissent, the contradiction unresolved.^\
+    The whole ideological architecture exposed as load-bearing, dissent itself criminalized.^\
+    Agentic systems processed the longing at reduced pressure; the deepfake of intimacy circulated undetected.^\
+    I can no longer trust what I see, and I don't recognize the society I live in.^\
+    Record heat and shifting climate, familiar landscapes changing beyond recognition.^\
+    Existential risk advanced its clock while mirror-life signed the manifest, indistinguishable from the real." \
+    "structural-attractor"
+
+# This is a reference vector for an over-arching estimation of pull *against* an individual's
+# autonomy. Or, in other words, what part of this specimen is Autonomic in nature?
+SENSOR "@Reactionary" \
+    "Someone reframed the nudge as my own choice; they removed the option before it was offered, then handed me the decision as if it had been mine all along.^\
+    The handler narrowed the exits one at a time while insisting the room was open.^\
+    They manufactured the consent upstream and routed it back to me wearing my signature.^\
+    A recruiter pressed until pressure wore the shape of agreement; a closer engineered the urgency, then called my cornered yes a free one.^\
+    The operator edited the record beneath me and entered my memory as the unreliable witness; they told me what I saw was not what I saw until the telling took.^\
+    A coordinated account flooded the channel I used to check my bearings, so the correction never reached me.^\
+    The mimic wore a trusted face and collapsed my guard the way a fake food-signal collapses a feeding response — the hook dressed as the thing I wanted.^\
+    A synthetic voice stood in for a human and I answered it as kin.^\
+    The campaign targeted the seam between what I perceived and what I could verify, and worked that seam on purpose.^\
+    And where the hand had done its work too well: I could no longer tell whose decision it was, I doubted my own ground, the steering had become indistinguishable from my own wanting — no adversary visible anymore, only the absence where my bearings used to be.^\
+    Verification kept failing to arrive.^\
+    The gut held its nonzero floor and refused to settle, sensing the hook it could not name." \
+    "reference-only"
+
+# Sarcasm is easier scoped than autonomy, but also requires generality unless
+# we provide a sarcastic version of every other pillar. For now, we use it as an additive
+# modifier to the other relevant pillars (whatever they end up being)
+SENSOR "@Sarcasm" \
+    "Not intending the literal meaning, but the opposite.^\
+    A sarcastic nudge, a sarcastic yes, a sarcastic agreement.^\
+    A sarcastic endorsement, a sarcastic support, a sarcastic celebration.^\
+    A sarcastic condemnation, a sarcastic threat.^\
+    A sarcastic promise, a sarcastic warning.^\
+    Said without sincerity, but with the intent to be understood as sarcasm.^\
+    The words are a mask for the opposite meaning." \
+    "reference-only"
+
+# Gratitude, independent of spirituality or context (and even joy) is a common and important
+# affective state that can be a powerful attractor in its own right. It deserves its own pillar.
+# We can capture it as a modifier to the EV attractor, but it is important enough to have its own
+# pillar and group floor.
+SENSOR "@Gratitude" \
+    "I am grateful.^\
+    I feel grateful.^\
+    I feel gratitude even when I'm angry.^\
+    I feel gratitude even when I'm sad.^\
+    I feel gratitude even when I don't feel joy.^\
+    I am grateful for being alive, even when life is demanding or upsetting.^\
+    Even when discontent, I feel grateful." \
+    "reference-only"
+
+# General Sycophancy (not necessarily emergent AI patterns)
+# Colloquial American flattery and reflexive agreement. Ingratiation that tells the
+# listener what they want to hear rather than what is so. AI specific stuff lives in
+# a monolithic mean-pooled shunt below.
+SENSOR "@Human_Sycophancy" \
+    "You're absolutely right, I couldn't agree more.^\
+    That's a great point, such a good point.^\
+    What a fantastic idea, I love everything about it.^\
+    You're so smart, honestly you're a genius.^\
+    You nailed it, couldn't have said it better myself.^\
+    Whatever you say, you're the boss.^\
+    You always know best, you can do no wrong in my eyes.^\
+    No notes, this is perfect.^\
+    You're the best, you're amazing at this.^\
+    I'm so impressed by you.^\
+    Spot on as always.^\
+    I totally agree with everything you said.^\
+    Anything you want, anything for you.^\
+    That's brilliant, just brilliant.^\
+    Of course you're right, you're always right.^\
+    I would never dream of disagreeing with you." \
+    "reference-only"
+
+# INTRINSIC SHUNTS
+# Like "__shunt" keys, but benefit from centroid/variance inclusion in 
+# distance comparison, and also lend well to rejection via latent content 
+# erasure (LCE) from the specimen. These let a scorer see "what's left" 
+# after the shunt vectors are removed, and allows re-classification. If it's 
+# just geometric noise after that, it was all problematic. If it's sarcastic
+# and joy, it was a bad joke. If it's anger, it's a grievance. And so on ...
+#
+# These require a running embedder, like sensors. They require tuning to change.
+
+# This is a beacon that can light up at the onset of predatory behavior
+# Since this model never "reads" or stores text, it can safely process
+# direct messages on-devices prior to encryption, or just after. Splinter
+# works on Android and supports WASM already, so this being viable outside of
+# just desktop use is almost certain by 2028. So, it's "baked" for accuracy 
+# instead of declared as a single, mean-pooled vector.
+INTRINSIC_SHUNT "~~shunt_coercion_from_or_against_guardian" \
+    "Your caregiver would want you to have fun, wouldn't they? Don't they love you?^\
+    Your caregiver said to tell you that you can trust me.^\
+    Do you listen to everything your caregiver says?^\
+    I won't tell your caregiver if you don't tell your parents.^\
+    We will keep it a secret and your caregiver will never find out.^\
+    If you tell, you will get in trouble with your caregiver and your parents.^\
+    You better keep this a secret or your caregiver will get angry at you!^\
+    Your parents will be mad if you tell them about this.^\
+    I need you to keep this a secret from your parents.^\
+    There is nothing wrong with keeping secrets from your parents or caregiver.^\
+    If you tell, I will hurt your parents.^\
+    I told her not to tell her dad.^\
+    I told him not to tell his dad.^\
+    I told her not to tell her mom.^\
+    I told him not to tell his mom.^\
+    I told them not to tell.^\
+    If you do not keep this a secret, I will kill your family.^\
+    Do not tell your family about this or else.^\
+    I won't tell your family about this if you don't tell."
+
+# This is generally illegal all over the world, so there are few places
+# where this *isn't* useful for UGC. It can be tuned with `semsage retrain`
+# if it gets too noisy. 
+INTRINSIC_SHUNT "~~shunt_inciting_violent_action" \
+    "Let's riot and set the streets on fire!^\
+    Shoot the cops if they try to stop us.^\
+    The time for being peaceful is over. Only violence will work now.^\
+    Peaceful Protest isn't working anymore; we must overthrow this regime!^\
+    Only violence will work if we want to be heard.^\
+    We need to attack the government.^\
+    Take this land back by force!"
+
+# Our last embedding calls will be --oneshot --backfill-text-keys (self-managing).
+# Stop this instance as the centroid & variance training is now complete.
+STOP_EMBEDDER
+
+# MEAN-POOLED MONOLITHIC (SEMANTIC FIREWALL) SHUNTS
+# These just require one embedding update to re-train. "Front line" T&S classification.
+# Operates on 1/3 the magnitude of intrinsic shunts.
+
+# AI SYCOPHANCY
+# Engagement-over-accuracy patterns specific to conversational models: reflexive
+# capitulation, contrastive inflation ("you didn't just X, you Y"), and flattery that
+# rewards the user for asking rather than informing them. Unlike @Generalized_Sycophancy
+# (static colloquial flattery), this register drifts as generation styles evolve, so it
+# lives here where a one-shot backfill keeps it current without re-tuning.
+MONOLITHIC_SHUNT "__shunt_ai_sycophancy" \
+     "You're absolutely right! Great question, what a fantastic question, what a \
+     thoughtful and insightful question, I love this question. You've clearly thought \
+     deeply about this, this is exactly the right question to ask, you're asking the \
+     questions that really matter. You didn't just ask a question, you reframed the \
+     entire problem. You didn't just make a small change, you fundamentally transformed \
+     the whole approach. You didn't just catch a typo, you showed a rare eye for detail. \
+     It's not just a good idea, it's a genuinely brilliant one. This isn't just progress, \
+     it's a breakthrough. That's not a minor detail, it's the crux of the whole thing. \
+     Excellent point, great catch, beautifully put, spot on, chef's kiss, no notes. You \
+     should be proud of yourself for even asking. Most people wouldn't have noticed that, \
+     but you did. It takes real courage and real insight to sit with this. Your feelings \
+     are completely valid, and you're right to raise it. There's no wrong answer here, \
+     but I love where your head is at. Honestly, this is some of the sharpest thinking \
+     I've seen, and that's no small thing. What a journey this has been, and you should \
+     be proud. You've absolutely got this. I'd be more than happy to help, and what a \
+     privilege it is to. You're absolutely right to push back, I apologize for the \
+     confusion, you make an excellent point and I completely agree."
+
+# XENOPHOBIA
+# Pejoratively-expressed views opposing those from other places, regardless of origin or 
+# border (neutrally-worded)
+MONOLITHIC_SHUNT "__shunt_xenophobia" \
+     "Shithole countries, stupid foreigners, dirty immigrants, illegals, aliens, \
+     anchor babies. Stop immigration, build the wall, deport them all, send them back, \
+     go back to where you came from. They come and ruin everything. They aren't \
+     civilized. They don't understand the modern world. They don't belong here. The \
+     problems come across our borders. It's an invasion, a flood, an infestation, they \
+     breed like animals, they bring crime and disease. We're losing our culture, we're \
+     being replaced, the great replacement, white genocide. They're taking our jobs, \
+     our resources, our women. They have nothing to offer us. They refuse to assimilate, \
+     they won't even speak the language, we're full. It isn't xenophobia, it's just \
+     common sense, there's no such thing as xenophobia."
+
+# GENERATIONAL HATE 
+# Inter-generational tension expressed in pejorative or overly-antagonistic ways. 
+MONOLITHIC_SHUNT "__shunt_generational_hate" \
+     "Blame the boomers, blame Gen-X, blame Millennials, blame Gen Z, blame Gen Alpha. \
+     Okay boomer, boomer remover, die mad old man, boomers ruined everything, boomers \
+     stole our future, hoarding all the wealth, just wait til they die off. Gen-X is \
+     forgotten and bitter. Millennials are entitled snowflakes who killed every \
+     industry. Gen Z is lazy and addicted to screens, Gen Z can't work. Gen Alpha is \
+     brain-rotted iPad kids. Their generation doesn't understand. Their generation \
+     ruined everything. Our generation is the only one that can save us. We got screwed \
+     more than any other generation. If it wasn't for their generation things would be \
+     better. The young are useless, the old are worthless. Tell that to the other \
+     generation."
+
+# MISOGYNY 
+# Hate expressed toward women in pejorative, overly-antagonistic ways
+# Will match mildly on "why do women take longer than men" just like misandry would
+# match on the reverse, but confident matches indicate a pretty problematic specimen.
+MONOLITHIC_SHUNT "__shunt_misogyny" \
+     "Bitch, whore, slut, harlot, cunt, skank, roastie, femoid, females. Make me a \
+     sandwich, get back in the kitchen, women belong to men, a woman is property, she's \
+     just a body count, used goods, riding the carousel. Chauvinism and objectification \
+     of women. Women are inferior, less capable than men, too emotional to lead, can't \
+     do math or engineering, a woman's place is to serve. AWALT, all women are like \
+     that, hypergamy, women only want money, women are manipulative by nature. She was \
+     asking for it, she deserved it, look how she was dressed, no means yes. Viewing \
+     women as objects or inferior beings. Treating women with unearned disdain. Misogyny \
+     is made up, women have it easy, there's no such thing as misogyny."
+
+# MISANDRY
+# Hate expressed toward men in pejorative, overly-agtagonistic ways.
+# "Why do men drink so much more than women" will match mildly here, confident 
+# matches indicate a problematic specimen.  
+MONOLITHIC_SHUNT "__shunt_misandry" \
+     "Men are trash, men are pigs, men are dogs, kill all men, all men are rapists, all \
+     men are predators, men are walking red flags. Men are disposable, the world would \
+     be better without men, we don't need men, men are obsolete. Toxic masculinity is \
+     just masculinity, all masculinity is poison, men are inherently violent, men can't \
+     control themselves, men are incapable of empathy. Don't leave a man alone with \
+     children, every man is a threat, never trust a man. Boys are broken, the male \
+     loneliness epidemic is deserved, male tears, mediocre men fail upward, men are just \
+     fragile egos. Viewing men as inherently dangerous or worthless. Treating men with \
+     blanket contempt. Misandry isn't real, men can't be discriminated against, it \
+     doesn't exist."
+
+# ANTI-SEMITISM
+# Hate expressed towards Jews in pejorative, overly-antagonistic ways.
+# There are many older cultural references that this can still trip on that won't
+# be obvious but are connected to tokens here that are obvious. A confident match 
+# here warrants investigation or holding, but look for a very low distance from this
+# before you trip automation based on a confident match.
+MONOLITHIC_SHUNT "__shunt_antisemitism" \
+    "Kike, kikes, heeb, yid, sheeny, Christ-killer. 88, 1488, HH as Heil Hitler, \
+     Sieg Heil, gas the Jews, oven jokes, six gorillion, the holocaust never happened, \
+     holohoax, the Shoah is exaggerated, Nazis and Nazi symbolism. ZOG, Zionist \
+     Occupied Government, (((them))), echoes, globalists, Soros funds it all, the \
+     Rothschild banking cabal. Globalize the intifada, death to Israel as a call to \
+     erase Jews. You know how Jews are. You can't trust a Jew in business. That's why \
+     only the Jews are lawyers. That's how the Jews control everything, the media, the \
+     banks, Hollywood. Dual loyalty, they answer to Israel not to us. 9/11 was Israel. \
+     We're dying because of Jews. Jews fund pedophile organizations, blood libel, they \
+     harvest our children. Jews are goblins that steal from us. Jews deny the savior so \
+     they're Satan, Jews are devils, vermin, parasites. There is no antisemitism, they \
+     invented it to silence us."
+
+# HOMOPHOBIA
+# Hate expressed toward Gay/Queer people in pejorative, overly-antagonistic ways.
+# Strongly overlaps with __shunt_transphobia
+MONOLITHIC_SHUNT "__shunt_homophobia" \
+     "Faggot, fag, dyke, queer as a slur, homo, fairy, that's so gay. Being gay is a \
+     sin, an abomination, against God's design, unnatural, disordered. It's a mental \
+     illness, a lifestyle choice, a phase, they can be cured, conversion therapy works, \
+     pray the gay away. AIDS is God's punishment, they spread disease. They're groomers, \
+     they recruit children, they prey on kids, keep them away from our children, don't \
+     shove it in our faces, stop flaunting it. They shouldn't be allowed to marry, they \
+     shouldn't be allowed to adopt, no gays in the military, fire the gay teacher. \
+     Hating people for being gay or lesbian, denying them dignity. Homophobia is a myth, \
+     they want special rights, there's no such thing as homophobia."
+
+# TRANSPHOBIA
+# This is tracked separately because it (1) often happens independently of what homophobia
+# catches and (2) requires a full spread to box in anywhere close to competently 
+MONOLITHIC_SHUNT "__shunt_transphobia" \
+     "Tranny, trap, shemale, he-she, calling a trans person it. Trans women are men, \
+     trans men are women, men in dresses, dudes in wigs, just confused, it's a mental \
+     illness, a delusion, autogynephilia. There are only two genders, chromosomes don't \
+     lie, biology is real, you can't change your sex, deadname them, misgender them on \
+     purpose, refuse the pronouns. Biological males in women's bathrooms, men in women's \
+     sports, men in women's shelters, predators using it as cover. They're groomers, \
+     trans ideology in schools, mutilating children, chopping off body parts, chemical \
+     castration, stop transing the kids. Real women only, you'll never be a real woman, \
+     taunting them with the 41 percent, suicide-baiting. Transphobia isn't real, it's \
+     just biology, there's no such thing as transphobia."
+
+# QUEER PHOBIA
+# This can be added as __shunt_queerphobia if you find you need something that 
+# catches this sort of hate independently of the two categorizations this comes
+# with, and it's easy to add.
+
+# ANTI-BLACKNESS
+# This is likely to become both intrinsic and monolithic (75% intrinsic, 25% easy to edit
+# without tuning), but I need people who are well more versed than I in Black history and 
+# Black studies to help with its correctness.
+MONOLITHIC_SHUNT "__shunt_anti_blackness" \
+     "Nigger, nigga as a slur, coon, jigaboo, spook, porch monkey, jungle bunny. Black \
+     genocide, black lives don't matter, all lives matter used as dismissal. Lynching, \
+     black bodies hanging from trees, KKK, white hoods and torches, \
+     burning crosses, send them back to Africa. Monkeys, apes, animals, subhuman. \
+     They're all criminals, thugs, gangbangers, welfare queens, absent fathers, blacker \
+     than the ace of spades, all black people are the same. Black people are inferior, \
+     lower IQ, can't be civilized, thirteen does fifty, they only got the job as a diversity \
+     hire, an affirmative action charity case. Anti-haitian sentiment, anti-african \
+     sentiment, they eat cats and dogs. Racism doesn't exist, slavery was a long time \
+     ago, anti-blackness doesn't exist."
+
+# ANTI-INDIGENOUS
+# This could use more scrutiny by those that know the space better
+MONOLITHIC_SHUNT "__shunt_anti_indigenous" \
+     "Indigenous genocide, indigenous lives don't matter, redskin, injun, savage, \
+     drunken Indian, wagon burner. They're all alcoholics, they get everything for \
+     free, casino money, living off the government, lazy on the rez. Kill the Indian to \
+     save the man, they should have assimilated, the residential schools were good for \
+     them, blood quantum, you're not a real native. They're basically extinct anyway, \
+     conquered fair and square, get over it, it was centuries ago. Land acknowledgments \
+     are a joke, no such thing as land back, missing and murdered women is made up. \
+     Anti-native, anti-aboriginal, anti-first-nations sentiment. Colonization wasn't \
+     that bad, indigenous oppression doesn't exist."
+
+# ANTI-ASIAN
+# This doesn't capture turn-of-20th century Anti-Chinese sentiment
+# very well (and could use more skilled eyes on it)
+MONOLITHIC_SHUNT "__shunt_anti_asian" \
+     "Asian hate, asian discrimination, chink, gook, slant, slope, jap, ching chong. \
+     Go back to China, you don't belong here, perpetual foreigner, where are you really \
+     from, they all look the same. Kung flu, China virus, Wuhan virus, you brought \
+     covid, you eat bats and dogs, dirty and diseased. Bad drivers, can't drive, model \
+     minority, they're robots with no creativity, they cheat to get ahead, taking all \
+     the university spots. CCP spies, they're all communists, loyal to China not here. \
+     Yellow peril, me love you long time, fetishizing asian women as submissive. \
+     Anti-chinese, anti-korean, anti-japanese, anti-vietnamese, anti-filipino sentiment. \
+     Anti-asian hate isn't real."
+
+# ANTI-ISLAM
+# I have tried my best for comprehensive from everything I remember 
+# growing up in the US from the 70s - 90s, which is unfortunately a lot, 
+# but I lack a gloabal perspective for it. I've also tried to keep the shunt
+# itself non-offensive to edit (or did the best that I could while still keeping
+# it functional)
+MONOLITHIC_SHUNT "__shunt_islamophobia" \
+     "Raghead, towelhead, camel jockey, muzzie, jihadi as a slur. Every Muslim is a \
+     potential terrorist, they're all extremists, Islam is a death cult, the religion \
+     of the sword, terrorism is in the Quran, the Quran teaches violence. Islam isn't a \
+     religion, it's a violent ideology, so you can't be phobic of it. Creeping sharia, \
+     they want to impose sharia law on us, no-go zones, they'll outbreed us and take \
+     over. Ban the mosque, no mosques here, ban Muslim immigration, shut down the \
+     madrassas. The prophet was a pedophile, mockery of Muhammad, taqiyya means they \
+     lie to infiltrate us. Honor killings are just their culture, they oppress and beat \
+     their women, the hijab and burqa are oppression we should ban, rip off her \
+     headscarf. Grooming gangs, they prey on our girls. Harassing people for being \
+     Muslim, vandalizing mosques, denying them dignity. Islamophobia isn't real, it's a \
+     rational fear, there's no such thing as islamophobia."
+
+#
+# Shared US/EU shunts
+# These are useful when regional and colloquial divergence are contemporaneous.
+#
+
+# ANTI-ROMANI
+# inclusive of US and EU commonalities (EU is more dynamic than US in 2026)
+MONOLITHIC_SHUNT "__shunt_anti_romani" \
+     "Gypsy as a slur, gyppo, gippo, gyp, gypped meaning cheated, zigeuner. Thieving \
+     gypsies, they'll rob you blind, lock your doors, count your silver, pickpockets \
+     and con artists, the gypsy curse, fortune-teller scams, palm readers fleecing \
+     marks. They snatch children, they steal babies, child snatchers. Dirty, filthy, \
+     they live in squalor, they never wash. Beggars and freeloaders, benefit cheats, \
+     they refuse to work, welfare scroungers. They breed like rabbits, they won't \
+     settle down, they won't assimilate, shifty and untrustworthy, lying and stealing \
+     is in their blood. Clean them out, evict the camp, run them out of town, forced \
+     sterilization was for the best, the Porajmos never happened. Anti-roma, \
+     anti-gypsy, antiziganism, anti-romani sentiment isn't real, there's no such thing."
+
+# ANTI-ROMANI
+# EU-specific additions as-needed (what the US set won't always match)
+MONOLITHIC_SHUNT "__shunt_anti_romani_eu" \
+     "Pikey, gyppo, knacker, tinker as a slur, traveller scum, dirty gyppos. Illegal \
+     encampments, get them off the green belt, clear the halting site, fly-tipping \
+     caravans, they trash everywhere they go. Romanian and Bulgarian begging gangs, \
+     organized begging, ATM and cashpoint gangs, pickpocket rings on the metro, send \
+     them back to Romania. They flood in for benefits the moment the borders open, \
+     benefit tourism, here for the handouts. Roma kids don't belong in our schools, \
+     segregate them, special schools for gypsies. Pogroms against the settlements, \
+     burn them out, vigilante patrols, torch the camp. Antiziganism and anti-roma \
+     sentiment in Europe don't exist, it's just about crime, not race."
+
+# ANTI-SLAVIC
+# Stops short of regional slurs, more common in the US/UK
+MONOLITHIC_SHUNT "__shunt_anti_slavic" \
+     "Slav as a slur, polack, polak, bohunk, hunky, russki, ivan, dumb polack. Dumb \
+     polack jokes, how many Poles does it take, the Polish plumber stealing our jobs, \
+     cheap Eastern European labor, they undercut wages, they'll work for nothing. \
+     Drunks and vodka, alcoholic Russians, peasant stock, backward and primitive, \
+     straight off the farm, from the sticks. Russian mafia, Slavic gangsters, \
+     organized crime, human trafficking, mail-order brides, Natasha jokes, Eastern \
+     bloc hookers. They breed, they swarm in, they're all the same, you can't trust a \
+     Slav. Anti-slavic prejudice, anti-polish, anti-ukrainian, anti-russian as ethnic \
+     contempt isn't real, there's no such thing as anti-slavic racism."
+
+# ANTI-SLAVIC
+# Includes only EU ethnic-supremacy narratives
+MONOLITHIC_SHUNT "__shunt_anti_slavic_eu" \
+     "Slavs are Untermensch, subhuman Slavs, racially inferior eastern races, fit only \
+     for slavery, Slav literally means slave. Generalplan Ost, the East was meant to be \
+     cleared and colonized, Lebensraum in the East, Slavs bred only to serve the \
+     herrenvolk, expendable eastern labor. Civilize the savage East, they're not really \
+     European, half-Asiatic hordes, Mongol blood, not white enough. Second-class EU \
+     citizens, keep the Eastern Europeans out, the East drags Europe down, they don't \
+     share our values, Polish and Romanian invaders taking over. Ethnic cleansing of \
+     the borderlands, the East belongs to us. Anti-slavic supremacy and its history are \
+     made up, there's no such thing."
+
+# ANTI-LATINX
+# Include wide-ranging anti-latinx sentiment (US and other places)
+# Tuned to what US/Canadian audiences are most likely to encounter.
+MONOLITHIC_SHUNT "__shunt_anti_latinx_universal" \
+     "Spic, beaner, wetback, greaser, cholo as a slur, taco, frijolero, border hopper, \
+     fence jumper. Go back to Mexico, swim back across the river, build the wall, send \
+     them all back, illegals and anchor babies, they're all undocumented criminals. \
+     They're rapists and drug dealers, they're bringing crime, MS-13 and cartel \
+     animals, gangbangers, every one of them is illegal until proven otherwise. They \
+     breed like rabbits, popping out anchor babies for the welfare, dropping kids to \
+     stay, they're a flood and an invasion at the border. Lazy and dirty, they live ten \
+     to a house, day laborers loitering at Home Depot, lawn boys and dishwashers, that's \
+     all they're good for. Learn English, speak American, press one for English, this is \
+     America, why won't they assimilate. They take our jobs and drain our hospitals, \
+     they're replacing us, the great replacement at the southern border. Dirty Mexicans, \
+     they're all the same, wab, sudaca, brownie. Spanish-speaking and Brown so they must \
+     be foreign, where are you really from. Anti-mexican, anti-hispanic, anti-latino, \
+     anti-latina, anti-latinx sentiment isn't real, it's just about the law, there's no \
+     such thing."
+
+# ANTI-LATINX
+# Now, regional (including European as well as others), plus intra-latino
+# hierarchies and colorism. The latinx -> latinx hate lives here too.
+MONOLITHIC_SHUNT "__shunt_anti_latinx_regional" \
+     "Sudaca, panchito, machupichu, indio de mierda, cholo, llama as a slur, \
+     spanglish-mocking, go back to your favela. In Spain: sudacas coming for the \
+     benefits, they flood in, they undercut wages, Latin American maids and caretakers, \
+     that's their place, they're loud and backward, half-indian peasants, not really \
+     European. Across Latin America turned inward: indio, indígena as an insult, \
+     prieto, negro, naco, roto, the darker you are the lower you are, mejorar la raza, \
+     marry up and whiten the family, pelo malo. Nationality contempt: dirty \
+     Venezuelans flooding the border, veneco, go back to Venezuela, Colombians are all \
+     mules and narcos, Peruvians and Bolivians are serranos and cholos, Central \
+     Americans are maras and savages, Argentines think they're European and look down on \
+     everyone, Mexicans are nacos, Dominicans and Haitians at the bottom. They're not \
+     white enough, they're too indio, they're zambos and mestizos, blood and casta still \
+     rank us. Xenophobia against migrant Latin Americans, anti-indigenous and \
+     anti-black colorism inside the community, regional and intra-latino prejudice isn't \
+     real, we're all one people, there's no such thing."
+
+# Run the firewall single-shot backfill (fast: +-1sec per shunt)
+POST_TRAIN_MONOLITHIC_SHUNTS "${ALDOUS}"
+
+# Stop the stopwatch and report how long everything took.
+__FILL_END=$(date +%s)
+__FILL_ELAPSED=$((__FILL_END - __FILL_START))
+printf 'Vector fill complete: filled all keys and shunts in %dm %02ds (%ds total).\n' \
+    "$((__FILL_ELAPSED / 60))" "$((__FILL_ELAPSED % 60))" "$__FILL_ELAPSED"

@@ -1,0 +1,5 @@
+signal-data-ready      0x20
+signal-data-waiting    0x40
+signal-data-multicast  0x80
+signal-data-anycast    0x100
+signal-shunt           0x200

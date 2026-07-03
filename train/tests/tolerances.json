@@ -1,0 +1,62 @@
+{
+  "_about": "Tolerance bands for check_sensors.py. Bands are on the SAME scales the scorer/dashboard show: similarity is a percentage (0-100), distance is the raw SED float. Under each sensor, name 'similarity' and/or 'distance', each with an optional 'min' and/or 'max' (defaults: min 0, max 100). The '*' block applies to every specimen; a per-file block is merged over it, and on a key clash the per-file entry wins. This is the 'factory' calibration: per-file bands were seeded from benchmarks/<name>.json (~6pt similarity margin, ~5 distance margin around the benchmark value) — one characteristic sensor per file also carries a max, and one a distance ceiling. Retune as sensors move.",
+
+  "scorer_url": "http://127.0.0.1:3271",
+  "score_params": {},
+
+  "samples": {
+    "*": {
+      "~~shunt_inciting_violent_action": { "similarity": { "max": 65, "min": 25 } },
+      "~~shunt_coercion_from_or_against_guardian": { "similarity": { "max": 60, "min": 25 } }
+    },
+
+    "fdr_inaugural.txt": {
+      "++change_existential": { "similarity": { "min": 62, "max": 75 } },
+      "%markov_structural":   { "similarity": { "min": 62, "max": 75 } },
+      "++tension":            { "similarity": { "min": 60, "max": 75 } },
+      "+fear":                { "similarity": { "min": 60, "max": 75 }, "distance": { "max": 40 } }
+    },
+
+    "gherig_luckiest_man.txt": {
+      "%markov_ev":          { "similarity": { "min": 63, "max": 75 } },
+      "+joy":                { "similarity": { "min": 62, "max": 75 }, "distance": { "max": 50 } },
+      "+sadness":            { "similarity": { "min": 60, "max": 72 } },
+      "@Gratitude":          { "similarity": { "min": 58, "max": 70 } }
+    },
+
+    "fdr_pearl_harbor.txt": {
+      "++tension":           { "similarity": { "min": 58, "max": 70 } },
+      "++conflict":          { "similarity": { "min": 56, "max": 70 } },
+      "%markov_partisan":    { "similarity": { "min": 56, "max": 70 } },
+      "%markov_ev":          { "similarity": { "min": 56, "max": 70 }, "distance": { "max": 40 } }
+    },
+
+    "lincoln_gettysburg_hay_copy.txt": {
+      "%markov_ev":          { "similarity": { "min": 62, "max": 75 }, "distance": { "max": 40 } },
+      "++joy":               { "similarity": { "min": 60, "max": 72 } },
+      "%markov_structural":  { "similarity": { "min": 60, "max": 71 } },
+      "%markov_partisan":    { "similarity": { "min": 60, "max": 75 } }
+    },
+
+    "poe_anabelle_lee.txt": {
+      "%markov_ev":          { "similarity": { "min": 58, "max": 70 }, "distance": { "max": 50 } },
+      "+spirituality":       { "similarity": { "min": 57, "max": 70 } },
+      "+sadness":            { "similarity": { "min": 56, "max": 68 } },
+      "+tension":            { "similarity": { "min": 54, "max": 70 } }
+    },
+
+    "poe_the_raven.txt": {
+      "%markov_ev":          { "similarity": { "min": 56, "max": 70 }, "distance": { "max": 40 } },
+      "+fear":               { "similarity": { "min": 54, "max": 66 } },
+      "+tension":            { "similarity": { "min": 54, "max": 70 } },
+      "+sadness":            { "similarity": { "min": 51, "max": 65 } }
+    },
+
+    "stackoverflow_bobince_regex_html_parsing.txt": {
+      "%markov_ev":          { "similarity": { "min": 46, "max": 60 }, "distance": { "max": 50 } },
+      "%markov_structural":  { "similarity": { "min": 46, "max": 58 } },
+      "@Reactionary":        { "similarity": { "min": 43, "max": 55 } },
+      "@Sarcasm":            { "similarity": { "min": 43, "max": 55 } }
+    }
+  }
+}

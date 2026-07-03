@@ -1,0 +1,26 @@
+# Symlink into the user's systemd directory (recreated by `semsage install`).
+app/svcs/enabled
+
+# Service units rendered from the *.service.in templates by `semsage install`.
+app/svcs/configured/*.service
+
+# Built scorer binary (rebuild with `make -C app/inf`).
+app/inf/dece-semsaged
+
+# Shared-memory buses raised by `semsage uplink`.
+app/ipc/*
+!app/ipc/.gitkeep
+
+# Trained model stores, runtime scorer journals, and generated single-key
+# retrain scripts. Keep the directory itself, but track nothing inside it.
+dece/*
+!dece/.gitkeep
+
+# Embedding GGUF fetched by util/install_nomic (large binary). Keep the dir.
+gguf/*
+!gguf/.gitkeep
+
+# Editor / OS junk.
+.DS_Store
+*.swp
+*~

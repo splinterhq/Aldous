@@ -1,0 +1,19 @@
+# Template unit for the DECE embeddings butler (splinference).
+#
+# This is a *.in template. `semsage install` expands @SEMSAGE_ROOT@ to the real
+# install root and writes embedder@.service in this directory, then symlinks
+# that rendered unit into the systemd user directory via ../enabled.
+# Edit the .in file, not the generated .service.
+#
+# %i is the model name with no suffix (e.g. Aldous_1-2). The embedder speaks to
+# the shared-memory bus at app/ipc/%i, which `semsage uplink %i` provisions.
+[Unit]
+Description=DECE embeddings butler for %i
+
+[Service]
+ExecStart=/usr/local/bin/splinferencep @SEMSAGE_ROOT@/app/ipc/%i @SEMSAGE_ROOT@/gguf/nomic.gguf 0
+Environment="DECE_MODEL=%i"
+WorkingDirectory=@SEMSAGE_ROOT@
+
+[Install]
+WantedBy=default.target

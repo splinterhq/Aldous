@@ -1,0 +1,113 @@
+#!/bin/bash
+# util/install_nomic — fetch the nomic-embed-text v1.5 GGUF the embedder uses.
+#
+# Downloads a quantization of nomic-ai/nomic-embed-text-v1.5-GGUF from Hugging
+# Face with curl and drops it at <project-root>/gguf/nomic.gguf — the path the
+# embedder service (app/svcs/configured/embedder@.service.in) and the training
+# helpers (util/lib/model_funcs.sh) both expect.
+#
+# Usage:
+#   util/install_nomic [<quant>] [-f|--force]
+#
+#   <quant>   one of the tags below (default: f16). f16 keeps full embedding
+#             fidelity at ~274MB; the Q* variants trade accuracy for size.
+#   -f        overwrite an existing gguf/nomic.gguf (otherwise it is kept).
+
+set -euo pipefail
+
+BOLD='\033[1m'; CYAN='\033[0;36m'; GREEN='\033[0;32m'
+YELLOW='\033[1;33m'; RED='\033[0;31m'; DIM='\033[2m'; RESET='\033[0m'
+
+log()  { printf "${DIM}  %s${RESET}\n" "$*"; }
+ok()   { printf "${GREEN}  ✓  %s${RESET}\n" "$*"; }
+warn() { printf "${YELLOW}  ⚠  %s${RESET}\n" "$*"; }
+die()  { printf "${RED}${BOLD}  ✗  %s${RESET}\n" "$*" >&2; exit 1; }
+
+REPO="nomic-ai/nomic-embed-text-v1.5-GGUF"
+
+# Quant tags published by the repo, smallest → largest. f16/f32 are unquantized.
+KNOWN_QUANTS=(
+    Q2_K Q3_K_S Q3_K_M Q3_K_L Q4_0 Q4_K_S Q4_K_M
+    Q5_0 Q5_K_S Q5_K_M Q6_K Q8_0 f16 f32
+)
+
+usage() {
+    cat <<EOF
+Usage: util/install_nomic [<quant>] [-f|--force]
+
+Fetch nomic-embed-text v1.5 (GGUF) into gguf/nomic.gguf for the embedder.
+
+Quant tags (default f16): ${KNOWN_QUANTS[*]}
+
+  -f, --force   overwrite an existing gguf/nomic.gguf
+  -h, --help    show this help
+EOF
+}
+
+# --- resolve the project root (parent of util/), following any symlinks -------
+self="${BASH_SOURCE[0]}"
+while [ -L "$self" ]; do
+    link=$(readlink "$self")
+    case $link in
+        /*) self=$link ;;
+        *)  self=$(dirname "$self")/$link ;;
+    esac
+done
+UTIL_DIR=$(cd "$(dirname "$self")" && pwd -P)
+ROOT=$(dirname "$UTIL_DIR")
+
+# --- parse args ---------------------------------------------------------------
+QUANT="f16"
+FORCE=0
+for arg in "$@"; do
+    case $arg in
+        -h|--help)  usage; exit 0 ;;
+        -f|--force) FORCE=1 ;;
+        -*)         die "unknown option '$arg' (try --help)" ;;
+        *)          QUANT=$arg ;;
+    esac
+done
+
+# Validate the quant up front so we fail with a helpful list, not a 404.
+match=0
+for q in "${KNOWN_QUANTS[@]}"; do [ "$q" = "$QUANT" ] && match=1 && break; done
+[ "$match" -eq 1 ] || die "unknown quant '$QUANT'. Choose one of: ${KNOWN_QUANTS[*]}"
+
+command -v curl >/dev/null 2>&1 || die "curl is required but was not found on PATH."
+
+FILE="nomic-embed-text-v1.5.${QUANT}.gguf"
+URL="https://huggingface.co/${REPO}/resolve/main/${FILE}?download=true"
+DEST_DIR="$ROOT/gguf"
+DEST="$DEST_DIR/nomic.gguf"
+PART="$DEST.part"
+
+printf "\n${BOLD}${CYAN}  nomic-embed-text v1.5 (%s)${RESET}\n" "$QUANT"
+log "repo: $REPO"
+log "file: $FILE"
+log "dest: $DEST"
+printf "\n"
+
+if [ -f "$DEST" ] && [ "$FORCE" -ne 1 ]; then
+    ok "gguf/nomic.gguf already present — nothing to do (use --force to replace)."
+    exit 0
+fi
+
+mkdir -p "$DEST_DIR"
+
+# -C - resumes a partial .part from a previous run; -f fails on HTTP errors so a
+# 404 page is never mistaken for the model; --progress-bar keeps the noise down.
+log "Downloading (resumable)…"
+if ! curl -fL --retry 3 --progress-bar -C - -o "$PART" "$URL"; then
+    die "download failed. Partial data left at ${PART}; re-run to resume."
+fi
+
+# GGUF files start with the magic bytes 'GGUF'; a stray HTML error page would not.
+if [ "$(head -c 4 "$PART" 2>/dev/null)" != "GGUF" ]; then
+    rm -f "$PART"
+    die "downloaded file is not a GGUF model (bad magic). Aborting."
+fi
+
+mv -f "$PART" "$DEST"
+ok "Saved $(du -h "$DEST" | cut -f1) → $DEST"
+printf "\n  The embedder will use this automatically. Next:\n"
+printf "    ${BOLD}semsage uplink <model>.dece${RESET}   then   ${BOLD}semsage start <model>.dece${RESET}\n\n"

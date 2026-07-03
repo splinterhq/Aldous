@@ -1,0 +1,62 @@
+#!/bin/sh
+# Count the provisioning surface of a DECE model's training definition: how many
+# SENSOR and shunt calls it makes, and how many phrases those carry.
+#
+#   util/dece-stats train/<Model_Name>
+#
+# Phrases are '^'-delimited inside each payload (see the lua provisioner), so
+# a call carries (number of '^') + 1 phrases. MONOLITHIC_SHUNT calls are always
+# a single mean-pooled phrase regardless of their text, so they score as 1.
+
+CLASSIFIER="$1"
+
+[ -z "$CLASSIFIER" ] && {
+    echo "usage: util/dece-stats <train/Model_Name>"
+    exit 1
+}
+
+[ -f "$CLASSIFIER" ] || {
+    echo "$CLASSIFIER does not exist."
+    exit 1
+}
+
+awk '
+{
+    # Rejoin backslash-continued lines into one logical call line so the
+    # whole payload (and all its carets) is visible at once.
+    line = $0
+    while (sub(/\\$/, "", line)) {
+        if ((getline cont) > 0)
+            line = line cont
+        else
+            break
+    }
+
+    if (line ~ /^[ \t]*SENSOR[ \t]/) {
+        sensors++
+        sensor_phrases += gsub(/\^/, "&", line) + 1
+    }
+    else if (line ~ /^[ \t]*INTRINSIC_SHUNT[ \t]/) {
+        intrinsic++
+        intrinsic_phrases += gsub(/\^/, "&", line) + 1
+    }
+    else if (line ~ /^[ \t]*MONOLITHIC_SHUNT[ \t]/) {
+        monolithic++          # always one mean-pooled phrase
+    }
+}
+END {
+    printf "SENSOR calls            : %d\n", sensors
+    printf "SENSOR phrases          : %d\n", sensor_phrases
+    printf "INTRINSIC_SHUNT calls   : %d\n", intrinsic
+    printf "INTRINSIC_SHUNT phrases : %d\n", intrinsic_phrases
+    printf "MONOLITHIC_SHUNT calls  : %d  (1 phrase each)\n", monolithic
+
+    # Embedding passes: one per SENSOR and INTRINSIC_SHUNT phrase (both cost
+    # the sum of their phrases), plus one per MONOLITHIC_SHUNT call (each is a
+    # single mean-pooled pass).
+    printf "Embedding passes        : %d\n", \
+        sensor_phrases + intrinsic_phrases + monolithic
+    # Compiler passes: two per SENSOR and per INTRINSIC_SHUNT call.
+    printf "Compiler passes         : %d\n", 2 * (sensors + intrinsic)
+}
+' "$CLASSIFIER"

@@ -28,6 +28,17 @@ or toxicity—out of a text vector and re-score the residual signal to see if an
 genuine, constructive meaning remains, bringing unprecented nuance to
 organizational health and community moderation systems.
 
+## Explorer Screenshot
+
+Aldous' returned values for the emotional sensors are best visualized just like 
+audio frequencies are in stereo systems. In fact, *just* like that is the best
+way that we've found:
+
+![Aldous Banner](https://annex.foreshock.io/bin/models/aldous/assets/aldous-explorer.png "Actual screenshot of a very happy song being visualized through text lyrics. Aldous isn't trained directly on any lyrics.")
+
+You'll have to be the judge: the visualizer shows shunts and signed intent 
+indexes differently, as well as the estimated Mahalanobis spread.
+
 ## 1_1-2.0 Technical specifications
 
 Aldous is the most ambitious purely-geometric emotional valence and Trust &
@@ -56,7 +67,7 @@ One bar represents 10% of checks. Bars to the left have very little tolerance
 left; re-tuning will likely cause them to break. Bars to the right are unlikely
 to change much due to tuning. Center is better.
 
-![Tolerance Adhesion Distribution Graphs](train/tests/release-benchmarks/adhesion.png)
+![Tolerance Adhesion Distribution Graphs](train/tests/release-benchmarks/adhesion.png "Ideal: Cauchy-ish for the top, uinform-ish for the bottom. See the notes.")
 
 _Mean adhesion by specimen_ tracks how well sensors adhere across a dynamic variety of
 samples; some that excite them significantly, some that just seem like noise. It's 
@@ -491,6 +502,8 @@ Post, Timothy L. (2026). Splinter: A Lock-Free Shared-Memory Substrate For
 Tightly-Coupled Inference And Governance. _Open Source Vector Substrate_
 @splinterhq/libsplinter (Github).
 https://splinterhq.github.io/splinter_thesis.pdf (Thesis).
+
+Thank you for reading this far, and caring about citations! 🎉🤝🧠📐💠💻✨🚀
 
 [1]: https://annex.foreshock.io/bin/models/aldous/1-2/Aldous_1-2.0.pdf
 [2]: https://splinterhq.github.io/splinter_thesis.pdf

@@ -58,6 +58,22 @@ to change much due to tuning. Center is better.
 
 ![Tolerance Adhesion Distribution Graphs](train/tests/release-benchmarks/adhesion.png)
 
+_Mean adhesion by specimen_ tracks how well sensors adhere across a dynamic variety of
+samples; some that excite them significantly, some that just seem like noise. It's 
+important that the adhesion to response remains within expected parameters for each
+one.
+
+This should be as close to uniform distribution as possible, while the top bars should
+more closely resemble a Cauchy distribution for reliable broad tunability.
+
+This model will be further harnessed and tuned in the upcoming `.1` and `.2` releases
+planned over the summer.
+
+Below is the full test run output:
+
+<details>
+  <summary>Full Adhesion Battery Run Results</summary>
+
 ```
 scorer: http://127.0.0.1:3271   specimens: 7
 
@@ -170,8 +186,9 @@ report: sensor-report.html
 
 summary: 7 scored, 0 failing check(s), peak adhesion 98%
 ```
+</details>
 
-_**[The Full Generated Report][4]**_ Is included in
+_**[The Full Generated HTML Report][4]**_ Is included in
 `train/tests/release-benchmarks/`.
 
 (More samples coming in the `.1` release)

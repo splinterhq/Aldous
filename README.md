@@ -209,6 +209,15 @@ _**[The Full Generated HTML Report][4]**_ Is included in
 While Aldous demonstrates amazing consistency and accuracy across a wide variety
 of well-known samples, there are things to understand:
 
+- **THIS IS A RESEARCH PREVIEW**. It has been tested on a huge volume of known
+  emotional target texts that unfortunately can't be included with the repoistory
+  because they're still technically in copyright, but Aldous has not been tested
+  nearly as thoroughly on human-originated off-the-hip phrasing. Each miss or
+  overzealous classification report right now ***is the instrumentation*** that
+  points out and closes gaps. Please set your expectations and know that we count
+  on cooperation at this stage, in addition to (and hopefully commensurate with)
+  any critcism you have.
+
 - You are limited to the embedder context window (typically small, 8-32k), so
   you have to use TKM on a dedicated GPU for an emotional summary of a long
   novel. Whereas, if you were sampling a live event every 30 seconds and

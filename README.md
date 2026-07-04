@@ -1,12 +1,12 @@
 # Aldous 1_1-2.0 Research Pre-Release
 
+![Aldous Banner](https://annex.foreshock.io/bin/models/aldous/assets/aldous-github-header-1280x300.png "Foreshock is a self-reinvesting product-funded research collective specifically for independents. We operate unconstrained by a need for hyper-growth.")
+
 _**Read The Papers (PDF):**_ [**Aldous 1-2.0 Primer**][1] |
 [**Splinter (File Format)**][2]
 
 Aldous `1_1-2.0` is the first (`.0` = Research/Beta) release in the Aldous 1_1-2
 line of Diagnoal Emotional Covariance Estimation models (DECE).
-
-## What is Aldous?
 
 Aldous is an open-source, zero-shot semantic telemetry and guardrail engine that
 analyzes text purely through geometry, completely bypassing generative AI.

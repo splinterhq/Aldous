@@ -348,7 +348,7 @@ make -C app/inf
 util/semsage install
 
 # 6. Optional: put semsage on your PATH (it still finds its install root).
-ln -s "$PWD/util/semsage" ~/.local/bin/semsage
+ln -s "$PWD/util/semsage" $HOME/.local/bin/semsage
 
 #
 # 7 - GO GET ALDOUS (train it or download it)

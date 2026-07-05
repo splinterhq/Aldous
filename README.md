@@ -237,7 +237,7 @@ of well-known samples, there are things to understand:
   concepts start flying around their communication spaces. Theyr'e specifically
   designed to not be fooled by simply turning phrases or changing strings. The
   incentive for participation is a lack of surprise or "opperession" by the
-  system that's supposed to be keeping people safe. If and "open" system doesn't
+  system that's supposed to be keeping people safe. If an "open" system doesn't
   explain itself, it feels like a Trojan horse. Aldous' primary goals surround
   putting governance back in the hands of the people that are vulnerable to
   these systems.
@@ -253,7 +253,7 @@ includes sensors for both Human and synthethic sycophancy. Detection requires
 brutal honesty, which is why Aldous does it purely with math.
 
 But you can't "semantically-self-analyze" something, and even though Aldous
-classifies things with stunning accuracy, AI reasoning spot patterns fast, just
+classifies things with stunning accuracy, AI reasoning spots patterns fast, just
 like in medical imaging. LLMs should never be used for emotional
 classifications, but interpreting them? With solid training, it opens many
 possibilities.

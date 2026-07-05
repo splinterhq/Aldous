@@ -56,7 +56,7 @@ Safety model that we know of (July 2026).
 | INTRINSIC_SHUNT phrases | 26                 |
 | MONOLITHIC_SHUNT calls  | 18 (1 highly-condensed phrase each) |
 | Embedding passes        | 732                |
-| Compiler passes         | 168                |
+| [Compiler][5] passes         | 168                |
 
 Stats are available via `util/dece-stats train/Aldous_1-2` from the root of the
 downloaded repo.
@@ -518,3 +518,4 @@ Thank you for reading this far, and caring about citations! 🎉🤝🧠📐💠
 [2]: https://splinterhq.github.io/splinter_thesis.pdf
 [3]: https://foreshock.io
 [4]: https://annex.foreshock.io/bin/models/aldous/1-2/sensor-benchmarks.html
+[5]: https://github.com/splinterhq/Aldous/blob/main/train/Aldous_1-2.lua

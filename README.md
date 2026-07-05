@@ -65,7 +65,9 @@ downloaded repo.
 
 One bar represents 10% of checks. Bars to the left have very little tolerance
 left; re-tuning will likely cause them to break. Bars to the right are unlikely
-to change much due to tuning. Center is better.
+to change much due to tuning and may even be a little too tolerant (some are unavoidable). 
+
+Center is better.
 
 ![Tolerance Adhesion Distribution Graphs](train/tests/release-benchmarks/adhesion.png "Ideal: Cauchy-ish for the top, uinform-ish for the bottom. See the notes.")
 

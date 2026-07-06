@@ -220,6 +220,16 @@ of well-known samples, there are things to understand:
   on cooperation at this stage, in addition to (and hopefully commensurate with)
   any critcism you have.
 
+- English-only with a strong US culture sensor bias. While the embedding model
+  covers every language (especially major languages) with a high degree of
+  fidelity, the semantic concepts that define the model sensors are rooted in
+  Western-US culture. You can't "translate" Aldous; you can only make a whole
+  new version of it using its sensor structure as a blueprint, with notes on
+  what the English phrasing was attempting to encapsulate. In similar cultures,
+  "transliterating" is likely sufficient. Spanish-speaking cultures could
+  adapt from a single adacemid base model. That doesn't necessarily transcend
+  to similar reaches.
+
 - You are limited to the embedder context window (typically small, 8-32k), so
   you have to use TKM on a dedicated GPU for an emotional summary of a long
   novel. Whereas, if you were sampling a live event every 30 seconds and

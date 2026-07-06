@@ -226,9 +226,9 @@ of well-known samples, there are things to understand:
   Western-US culture. You can't "translate" Aldous; you can only make a whole
   new version of it using its sensor structure as a blueprint, with notes on
   what the English phrasing was attempting to encapsulate. In similar cultures,
-  "transliterating" is likely sufficient. Spanish-speaking cultures could
-  adapt from a single adacemid base model. That doesn't necessarily transcend
-  to similar reaches.
+  "transliterating" is likely sufficient. For instance, Spanish-speaking cultures
+  could likely adapt from a single adacemic base model. That doesn't necessarily
+  transcend to similar reaches. Translation platforms will *not* work.
 
 - You are limited to the embedder context window (typically small, 8-32k), so
   you have to use TKM on a dedicated GPU for an emotional summary of a long

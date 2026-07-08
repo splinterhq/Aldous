@@ -386,8 +386,8 @@ Github is the best place for things to not get lost right now.
 ## Foundations & Acknowledgements
 
 Aldous is Free Software under the terms of the Apache 2 software license, where
-applicable, or CC-0 where the content is prosaic, not code, and not describing
-the creation of code. The vector substrate and file system backing Aldous, which
+applicable, or CC-0 where the content is prosaic, not code, and not a prompt that
+results in the creation of code. The vector substrate and file system backing Aldous, which
 is named Splinter, is also free software under the terms of the Apache 2
 software license.
 

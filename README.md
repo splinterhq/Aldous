@@ -374,7 +374,7 @@ semsage status Aldous_1-2.dece
 semsage visualize
 ```
 
-## Getting Involved / Contributing / Reporting Issues
+## Getting involved / contributing / reporting Issues
 
 Use the Github facilities for now. The
 [company behind Aldous](https://foreshock.io) is in the midst of a rather large
@@ -383,7 +383,7 @@ responsibly keep an eye on it.
 
 Github is the best place for things to not get lost right now.
 
-## Foundations & Acknowledgements
+## Foundations & acknowledgements
 
 Aldous is Free Software under the terms of the Apache 2 software license, where
 applicable, or CC-0 where the content is prosaic, not code, and not a prompt that

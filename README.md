@@ -456,8 +456,8 @@ Their work matters every bit as much as Aldous' core mission to remain
 transparent, deterministic and auditable. We are glad to build in the open on
 foundations that were shared with so much passion, care and respect for the 
 advancement of our collective sum of knowledge. Their work *is* the knowledge
-that lets us know *why* Aldous works, which is *why* it's useful beyond 
-social media parlor tricks.
+that lets us know *why* Aldous works, which is *why* its uses far exceed its 
+novelty.
 
 The references below are here so that anyone can follow a claim back to its
 source.

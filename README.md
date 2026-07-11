@@ -450,12 +450,14 @@ rigor (Ravfogel et al., 2020, 2022; Belrose et al., 2023). Aldous applies it to
 re-scoring rather than debiasing, but the geometry is theirs. Furthermore, the
 tolerance harness that gates every release is behavioral testing in the
 tradition of CheckList (Ribeiro et al., 2020), carried into trust and safety,
-where reproducible receipts matter themost.
+where reproducible receipts matter the most.
 
 Their work matters every bit as much as Aldous' core mission to remain
 transparent, deterministic and auditable. We are glad to build in the open on
-foundations that were shared with so much care and respect for our collective
-sum of knowledge.
+foundations that were shared with so much passion, care and respect for the 
+advancement of our collective sum of knowledge. Their work *is* the knowledge
+that lets us know *why* Aldous works, which is *why* it's useful beyond 
+social media parlor tricks.
 
 The references below are here so that anyone can follow a claim back to its
 source.

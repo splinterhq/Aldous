@@ -1,8 +1,10 @@
+---
 # .foreshock.yml
 version: 1
 mode: telemetry_only           # or active to actively interact
 sensitivity: medium     # low=85 | medium=75 | high=65 confidence threshold
 safety_defaults: true
+---
 
 ## Hostile
 Thanks for the report. This thread has been flagged for review.
